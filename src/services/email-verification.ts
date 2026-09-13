@@ -229,3 +229,39 @@ export async function resendVerificationEmail(
 
   return sendVerificationEmail(env, email, verification.verification_token, siteName, siteUrl);
 }
+
+/**
+ * 每用户每日邮件发送限额（默认 5 封）
+ * 通过 email_send_log 表按 user_id + send_date（Asia/Shanghai）计数
+ * 返回 { ok, remaining }；ok=true 表示本次允许发送（并已记账）
+ */
+export async function checkEmailSendQuota(
+  env: Env,
+  db: D1Database,
+  userId: number
+): Promise<{ ok: boolean; remaining: number }> {
+  const limit = parseInt(env.EMAIL_DAILY_EMAIL_LIMIT || '5', 10) || 5;
+
+  // Asia/Shanghai 日期（UTC+8）
+  const date = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+  const row = await db
+    .prepare('SELECT count FROM email_send_log WHERE user_id = ? AND send_date = ?')
+    .bind(userId, date)
+    .first<{ count: number }>();
+
+  const cur = row?.count || 0;
+  if (cur >= limit) {
+    return { ok: false, remaining: 0 };
+  }
+
+  await db
+    .prepare(
+      `INSERT INTO email_send_log (user_id, send_date, count) VALUES (?, ?, 1)
+       ON CONFLICT(user_id, send_date) DO UPDATE SET count = count + 1, updated_at = datetime('now')`
+    )
+    .bind(userId, date)
+    .run();
+
+  return { ok: true, remaining: limit - cur - 1 };
+}

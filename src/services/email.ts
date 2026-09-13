@@ -50,7 +50,13 @@ async function sendViaMailChannels(
       }),
     });
 
-    return response.status === 202 || response.ok;
+    if (response.status === 202 || response.ok) {
+      return true;
+    }
+    // 读取响应体以便定位拒发原因（Domain Lockdown / SPF / from 域名 等）
+    const bodyText = await response.text().catch(() => '');
+    console.error('MailChannels rejected:', response.status, bodyText.slice(0, 500));
+    return false;
   } catch (err) {
     console.error('MailChannels send error:', err);
     return false;
@@ -88,9 +94,53 @@ async function sendViaSmtpGateway(
       }),
     });
 
-    return response.ok;
+    if (response.ok) {
+      return true;
+    }
+    const bodyText = await response.text().catch(() => '');
+    console.error('SMTP gateway rejected:', response.status, bodyText.slice(0, 500));
+    return false;
   } catch (err) {
     console.error('SMTP gateway send error:', err);
+    return false;
+  }
+}
+
+/**
+ * 通过 Resend 发送（HTTP API，推荐作为第三方发信服务）
+ * 只需配置 RESEND_API_KEY，无需 MailChannels 那套 DNS（SPF/Domain Lockdown/DKIM）
+ */
+async function sendViaResend(
+  env: Env,
+  options: EmailOptions
+): Promise<boolean> {
+  const fromEmail = env.SMTP_FROM || `noreply@${getDomainFromEnv(env)}`;
+  const fromName = env.SMTP_FROM_NAME || env.SITE_NAME || 'SubDomain Hub';
+
+  try {
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${env.RESEND_API_KEY}`,
+      },
+      body: JSON.stringify({
+        from: `${fromName} <${fromEmail}>`,
+        to: [options.to],
+        subject: options.subject,
+        html: options.html,
+        text: options.text || '',
+      }),
+    });
+
+    if (response.ok) {
+      return true;
+    }
+    const bodyText = await response.text().catch(() => '');
+    console.error('Resend rejected:', response.status, bodyText.slice(0, 500));
+    return false;
+  } catch (err) {
+    console.error('Resend send error:', err);
     return false;
   }
 }
@@ -107,11 +157,17 @@ export async function sendEmail(
   env: Env,
   options: EmailOptions
 ): Promise<boolean> {
+  // 1) 配置了 RESEND_API_KEY → 走 Resend（第三方，推荐）
+  if (env.RESEND_API_KEY) {
+    return sendViaResend(env, options);
+  }
+
+  // 2) 配置了 SMTP 三件套 → 走 SMTP HTTP 网关
   if (env.SMTP_HOST && env.SMTP_USER && env.SMTP_PASS) {
     return sendViaSmtpGateway(env, options);
   }
 
-  // 默认使用 MailChannels
+  // 3) 默认 MailChannels
   return sendViaMailChannels(env, options);
 }
 

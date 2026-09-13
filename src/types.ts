@@ -33,6 +33,10 @@ export interface Env {
   EMAIL_VERIFICATION_REQUIRED?: string;
   // 允许的邮箱域名白名单（逗号分隔，空=不限制）
   ALLOWED_EMAIL_DOMAINS?: string;
+  // 第三方发信服务（推荐 Resend；配置后优先走 Resend）
+  RESEND_API_KEY?: string;
+  // 每用户每天最大邮件发送数（默认 5）
+  EMAIL_DAILY_EMAIL_LIMIT?: string;
 }
 
 export interface Announcement {

@@ -9,6 +9,7 @@ import {
   createEmailVerification,
   verifyEmailByToken,
   resendVerificationEmail,
+  checkEmailSendQuota,
 } from '../services/email-verification';
 import { sendEmail } from '../services/email';
 import { updateUserEmail } from '../db/queries';
@@ -61,6 +62,12 @@ verification.post('/send', authMiddleware, async (c) => {
   }
 
   try {
+    // 每日发信限额（每用户 5 封）
+    const quota = await checkEmailSendQuota(env, c.env.DB, user.id);
+    if (!quota.ok) {
+      return c.json({ error: '已达今日邮件发送上限（5 封），请明天再试', code: 'EMAIL_QUOTA_EXCEEDED' }, 429);
+    }
+
     const token = crypto.randomUUID().replace(/-/g, '');
     await createEmailVerification(c.env.DB, user.id, user.email);
 
@@ -70,7 +77,7 @@ verification.post('/send', authMiddleware, async (c) => {
 
     await resendVerificationEmail(env, c.env.DB, user.id, user.email, siteName, siteUrl);
 
-    return c.json({ message: '验证邮件已发送，请查收' });
+    return c.json({ message: '验证邮件已发送，请查收', remaining: quota.remaining });
   } catch (err: any) {
     return c.json({ error: err.message || '发送验证邮件失败' }, 500);
   }
@@ -98,6 +105,12 @@ verification.post('/bind', authMiddleware, async (c) => {
   }
 
   try {
+    // 每日发信限额（每用户 5 封）
+    const quota = await checkEmailSendQuota(env, c.env.DB, user.id);
+    if (!quota.ok) {
+      return c.json({ error: '已达今日邮件发送上限（5 封），请明天再试', code: 'EMAIL_QUOTA_EXCEEDED' }, 429);
+    }
+
     await updateUserEmail(c.env.DB, user.id, email);
 
     const token = crypto.randomUUID().replace(/-/g, '');
@@ -109,7 +122,7 @@ verification.post('/bind', authMiddleware, async (c) => {
 
     await resendVerificationEmail(env, c.env.DB, user.id, email, siteName, siteUrl);
 
-    return c.json({ message: '邮箱已绑定，验证邮件已发送，请查收', email });
+    return c.json({ message: '邮箱已绑定，验证邮件已发送，请查收', email, remaining: quota.remaining });
   } catch (err: any) {
     return c.json({ error: err.message || '绑定邮箱失败' }, 500);
   }

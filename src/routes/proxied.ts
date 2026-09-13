@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
-import { authMiddleware } from '../middleware/auth';
+import { authMiddleware, emailVerifiedMiddleware } from '../middleware/auth';
 import { getSubdomainById, getDnsRecordById, updateDnsRecordEntry } from '../db/queries';
 import {
   getActiveAccounts,
@@ -12,7 +12,7 @@ type Variables = { user: User };
 
 const proxied = new Hono<{ Bindings: Env; Variables: Variables }>();
 
-proxied.use('/*', authMiddleware);
+proxied.use('/*', authMiddleware, emailVerifiedMiddleware);
 
 // 切换 DNS 记录的代理状态
 proxied.put('/records/:recordId/proxied', async (c) => {

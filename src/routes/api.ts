@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import type { Env, User, DnsRecordInput } from '../types';
 import { ALLOWED_RECORD_TYPES as RECORD_TYPES } from '../types';
-import { authMiddleware, adminMiddleware } from '../middleware/auth';
+import { authMiddleware, emailVerifiedMiddleware, adminMiddleware } from '../middleware/auth';
 import {
   getDomainNames,
   getBannedPrefixes,
@@ -47,7 +47,7 @@ type Variables = { user: User };
 const api = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 // 所有 API 路由需要认证
-api.use('/*', authMiddleware);
+api.use('/*', authMiddleware, emailVerifiedMiddleware);
 
 // ==================== 用户信息 ====================
 
@@ -146,8 +146,15 @@ api.post('/subdomains', async (c) => {
       url.origin
     );
     const adminList = await getAllUsers(c.env.DB);
-    for (const admin of adminList.filter((u) => u.is_admin && u.email)) {
+    // 优先发给已绑定邮箱的管理员
+    const adminsWithEmail = adminList.filter((u) => u.is_admin && u.email);
+    for (const admin of adminsWithEmail) {
       notifyEmail.to = admin.email!;
+      await sendEmail(c.env, notifyEmail).catch(() => {});
+    }
+    // 若没有带邮箱的管理员，回退发送到配置的联系邮箱，确保通知必达
+    if (adminsWithEmail.length === 0 && c.env.ADMIN_CONTACT_EMAIL) {
+      notifyEmail.to = c.env.ADMIN_CONTACT_EMAIL;
       await sendEmail(c.env, notifyEmail).catch(() => {});
     }
   } catch {

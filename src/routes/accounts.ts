@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
-import { authMiddleware } from '../middleware/auth';
+import { authMiddleware, emailVerifiedMiddleware } from '../middleware/auth';
 import {
   getUserAccounts,
   getDefaultAccount,
@@ -16,7 +16,7 @@ type Variables = { user: User };
 
 const accounts = new Hono<{ Bindings: Env; Variables: Variables }>();
 
-accounts.use('/*', authMiddleware);
+accounts.use('/*', authMiddleware, emailVerifiedMiddleware);
 
 // 获取用户的 Cloudflare 账户列表
 accounts.get('/', async (c) => {

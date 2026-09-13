@@ -20,10 +20,12 @@ export async function getEncryptionKey(env: { ENCRYPTION_KEY?: string }): Promis
     const encoder = new TextEncoder();
     const keyMaterial = encoder.encode(env.ENCRYPTION_KEY);
 
-    // 使用 SHA-256 派生固定长度密钥
+    // 使用 SHA-256 派生固定 32 字节(256 位)密钥
+    // 对任意长度(>=1字节)的 ENCRYPTION_KEY 均有效，消除 AES-GCM 对 key 长度(128/192/256 位)的敏感
+    const digest = await crypto.subtle.digest('SHA-256', keyMaterial);
     return crypto.subtle.importKey(
       'raw',
-      keyMaterial,
+      digest,
       'AES-GCM',
       false,
       ['encrypt', 'decrypt']
