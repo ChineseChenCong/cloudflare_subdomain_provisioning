@@ -22,3 +22,11 @@ MAX_RECORDS_PER_SUBDOMAIN = "20"
 
 # 站点名称
 SITE_NAME = "SubDomain Hub"
+
+# ========== 新增配置 ==========
+
+# 是否要求邮箱验证
+EMAIL_VERIFICATION_REQUIRED = "true"
+
+# 允许的邮箱域名白名单（逗号分隔，空=不限制）
+ALLOWED_EMAIL_DOMAINS = "gmail.com,outlook.com,qq.com,163.com,126.com,foxmail.com,icloud.com"

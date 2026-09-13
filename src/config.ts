@@ -80,3 +80,21 @@ export function getAdminUsers(env: Env): string[] {
 export function isSmtpConfigured(env: Env): boolean {
   return !!(env.SMTP_HOST && env.SMTP_USER && env.SMTP_PASS);
 }
+
+// ==================== Email Verification ====================
+
+export function isEmailVerificationRequired(env: Env): boolean {
+  return env.EMAIL_VERIFICATION_REQUIRED === 'true' || env.EMAIL_VERIFICATION_REQUIRED === '1';
+}
+
+export function getAllowedEmailDomains(env: Env): string[] {
+  const whitelist = env.ALLOWED_EMAIL_DOMAINS;
+  if (!whitelist || whitelist.trim() === '') {
+    return [];
+  }
+
+  return whitelist
+    .split(',')
+    .map((d) => d.trim().toLowerCase())
+    .filter(Boolean);
+}

@@ -4,6 +4,9 @@ import type { Env, User } from './types';
 import authRoutes from './routes/auth';
 import apiRoutes from './routes/api';
 import pageRoutes from './routes/pages';
+import accountRoutes from './routes/accounts';
+import verificationRoutes from './routes/verification';
+import proxiedRoutes from './routes/proxied';
 
 type Variables = { user: User };
 
@@ -22,6 +25,9 @@ app.get('/health', (c) => c.json({ status: 'ok', timestamp: new Date().toISOStri
 // 路由挂载
 app.route('/auth', authRoutes);
 app.route('/api', apiRoutes);
+app.route('/api/accounts', accountRoutes);
+app.route('/api/verification', verificationRoutes);
+app.route('/api/proxied', proxiedRoutes);
 app.route('/', pageRoutes);
 
 // 404

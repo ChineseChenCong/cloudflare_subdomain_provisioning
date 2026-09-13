@@ -4,7 +4,7 @@ import type { Env, User } from '../types';
 import { getGitHubAuthUrl, exchangeCodeForToken, getGitHubUser } from '../services/github';
 import { upsertUser } from '../db/queries';
 import { signJwt } from '../middleware/auth';
-import { getAdminUsers } from '../config';
+import { getAdminUsers, isEmailVerificationRequired, getAllowedEmailDomains } from '../config';
 
 type Variables = { user: User };
 
@@ -38,8 +38,7 @@ auth.get('/github/callback', async (c) => {
     return c.json({ error: '缺少参数' }, 400);
   }
 
-  // 验证 state (简化版，生产中应从 cookie 验证)
-  // 在 Workers 环境中 cookie 验证
+  // 验证 state
   const savedState = c.req.header('cookie')
     ?.split(';')
     .find((c) => c.trim().startsWith('oauth_state='))
@@ -65,6 +64,18 @@ auth.get('/github/callback', async (c) => {
     const adminUsers = getAdminUsers(c.env);
     const isAdmin = adminUsers.includes(ghUser.login.toLowerCase());
 
+    // 检查邮箱是否在白名单中
+    const allowedDomains = getAllowedEmailDomains(c.env);
+    if (allowedDomains.length > 0 && ghUser.email) {
+      const emailDomain = ghUser.email.split('@')[1]?.toLowerCase();
+      if (emailDomain && !allowedDomains.includes(emailDomain)) {
+        return c.json({
+          error: `邮箱域名 @${emailDomain} 不在允许列表中`,
+          allowed_domains: allowedDomains,
+        }, 403);
+      }
+    }
+
     // 创建或更新用户
     const user = await upsertUser(
       c.env.DB,
@@ -74,6 +85,9 @@ auth.get('/github/callback', async (c) => {
       ghUser.email,
       isAdmin
     );
+
+    // 检查是否需要邮箱验证
+    const verificationRequired = isEmailVerificationRequired(c.env);
 
     // 签发 JWT
     const now = Math.floor(Date.now() / 1000);
@@ -98,6 +112,11 @@ auth.get('/github/callback', async (c) => {
       path: '/',
     });
 
+    // 如果需要邮箱验证且用户未验证，重定向到验证页面
+    if (verificationRequired && !user.email_verified && user.email) {
+      return c.redirect('/?view=verify-email');
+    }
+
     return c.redirect('/');
   } catch (err) {
     console.error('OAuth callback error:', err);
@@ -106,7 +125,7 @@ auth.get('/github/callback', async (c) => {
 });
 
 // 登出
-auth.get('/logout', async (c) => {
+auth.get('/logout', (c) => {
   deleteCookie(c, 'session', { path: '/' });
   return c.redirect('/');
 });

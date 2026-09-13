@@ -1,23 +1,48 @@
-# GitHub OAuth App 配置
+# GitHub OAuth
 GITHUB_CLIENT_ID=your_github_client_id
 GITHUB_CLIENT_SECRET=your_github_client_secret
 
-# JWT 签名密钥（随机字符串）
-JWT_SECRET=your_random_jwt_secret_at_least_32_chars
+# JWT 密钥（随机生成32位以上字符串）
+JWT_SECRET=your_jwt_secret_key_here
 
-# Cloudflare API Token（需要 DNS 编辑权限）
+# Cloudflare API Token（需要 Zone > DNS > Edit 和 Zone > Zone > Read 权限）
 CF_API_TOKEN=your_cloudflare_api_token
 
-# 域名配置，多个用逗号分隔（Zone ID 自动解析）
+# 域名列表（逗号分隔，Zone ID 自动解析）
 DOMAINS=example.com,example.org
 
-# 管理员 GitHub 用户名（逗号分隔，可选）
+# 禁止的前缀
+BANNED_PREFIXES=www,ns1,ns2,ns,mc,mail,smtp,pop,pop3,imap,ftp,admin,api,cdn,dev,staging,test,beta,alpha,demo,status,blog,shop,store,app,dashboard,panel,portal,secure,vpn,proxy,relay,mx,mx1,mx2,autoconfig,autodiscover,_dmarc,_domainkey,cpanel,webmail,webdisk,cpcalendars,cpcontacts,ww,ww1,ww2,ww3
+
+# 每用户最多子域名数
+MAX_SUBDOMAINS_PER_USER=1
+
+# 每子域名最多 DNS 记录数
+MAX_RECORDS_PER_SUBDOMAIN=20
+
+# 管理员 GitHub 用户名（逗号分隔）
 ADMIN_USERS=your_github_username
 
-# SMTP 邮件通知配置（可选，不配置则使用 MailChannels 发信）
-# SMTP_HOST=smtp.example.com
-# SMTP_PORT=587
-# SMTP_USER=your_smtp_user
-# SMTP_PASS=your_smtp_password
-# SMTP_FROM=noreply@example.com
-# SMTP_FROM_NAME=SubDomain Hub
+# 站点名称
+SITE_NAME=SubDomain Hub
+
+# ========== 新增配置 ==========
+
+# 加密密钥（用于加密敏感数据，随机生成32位以上字符串）
+ENCRYPTION_KEY=your_encryption_key_here
+
+# 是否要求邮箱验证（true/false）
+EMAIL_VERIFICATION_REQUIRED=true
+
+# 允许的邮箱域名白名单（逗号分隔，留空=不限制）
+ALLOWED_EMAIL_DOMAINS=gmail.com,outlook.com,qq.com,163.com,126.com,foxmail.com,icloud.com
+
+# ========== 邮件通知（可选） ==========
+
+# 外部 SMTP
+SMTP_HOST=smtp.example.com
+SMTP_PORT=587
+SMTP_USER=your_smtp_user
+SMTP_PASS=your_smtp_password
+SMTP_FROM=noreply@example.com
+SMTP_FROM_NAME=SubDomain Hub

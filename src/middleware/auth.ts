@@ -144,3 +144,32 @@ export async function adminMiddleware(
   }
   await next();
 }
+
+/**
+ * 邮箱验证中间件
+ * 检查用户是否已验证邮箱（如果启用了邮箱验证）
+ */
+export async function emailVerifiedMiddleware(
+  c: Context<{ Bindings: Env; Variables: Variables }>,
+  next: Next
+) {
+  const env = c.env;
+  const user = c.get('user');
+
+  if (!user) {
+    return c.json({ error: '未登录' }, 401);
+  }
+
+  // 检查是否需要邮箱验证
+  const verificationRequired = env.EMAIL_VERIFICATION_REQUIRED === 'true' || env.EMAIL_VERIFICATION_REQUIRED === '1';
+
+  if (verificationRequired && !user.email_verified) {
+    return c.json({
+      error: '邮箱未验证',
+      code: 'EMAIL_NOT_VERIFIED',
+      email: user.email,
+    }, 403);
+  }
+
+  await next();
+}
