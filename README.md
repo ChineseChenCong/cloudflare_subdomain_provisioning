@@ -7,17 +7,18 @@
 ### 核心功能
 - **GitHub OAuth 登录** — 仅允许 GitHub 用户申请子域名
 - **邮箱验证** — GitHub 登录后需验证邮箱，支持邮箱域名白名单
-- **多账户支持** — 支持绑定多个 Cloudflare 账户的 API Token
+- **多账户支持** — 支持绑定多个 Cloudflare 账户的 API Token（不同域名可绑定到不同账户）
 - **多域名分发** — 支持多个主域名在系统中用于分发
 - **管理员审核制度** — 申请需管理员审核，支持通过/拒绝（附原因）
-- **邮件通知** — 审核结果自动通过邮件通知用户，新申请通知管理员
+- **邮件通知** — 审核结果自动通过邮件通知用户，新申请通知管理员（支持 MailChannels）
 - **完整 DNS 控制** — 支持 A、AAAA、CNAME、MX、TXT、SRV、CAA 全类型记录
 - **代理开关** — 一键切换 Cloudflare 黄色云朵代理（A/AAAA/CNAME）
 - **子域名保护** — 内置 50+ 禁止前缀列表（www、ns1、mc 等）
 - **配额管理** — 可配置每用户子域名数量和每子域名 DNS 记录数
 - **暗/亮主题** — 自适应主题切换（蓝白色系）
 - **可爱动画** — 果冻动效、点击反馈、悬浮动画等精美动效
-- **数据加密** — 敏感数据（如 API Token）加密存储
+- **数据加密** — 敏感数据（如 API Token）使用 AES-GCM 加密存储
+- **自定义外观** — 支持设置背景图、背景图遮罩、站点 Logo
 - **管理员面板** — 待审核队列、全子域名管理、用户列表
 - **完全无服务器** — 运行在 Cloudflare Workers 上，零服务器成本
 
@@ -91,7 +92,12 @@ npm install
    - **Authorization callback URL**: `https://your-worker-domain.workers.dev/auth/github/callback`
 4. 记下 `Client ID` 和 `Client Secret`
 
-### 4. 创建 Cloudflare API Token
+### 4. Cloudflare API Token 配置
+
+本系统支持两种模式：
+
+#### 模式 A：全局 Token（向后兼容）
+如果所有域名都在同一个 Cloudflare 账户下，可以继续使用全局 `CF_API_TOKEN`。
 
 1. 前往 [Cloudflare API Tokens](https://dash.cloudflare.com/profile/api-tokens)
 2. 创建自定义 Token:
@@ -100,6 +106,17 @@ npm install
 3. 记下 API Token
 
 > ⚠️ 需要 **Zone > Zone > Read** 权限用于自动解析域名的 Zone ID
+
+#### 模式 B：多账户绑定（推荐）
+如果域名分布在多个 Cloudflare 账户下，可以：
+1. **不设置** 全局 `CF_API_TOKEN`（或仅用于默认解析）
+2. 在系统中为每个账户**单独绑定** API Token（支持不同域名绑定到不同账户）
+3. 系统会自动从用户绑定的账户列表中解析 Zone ID
+
+**优势**：
+- 不同域名可以使用不同 Cloudflare 账户的 API Token
+- 避免单点故障，提高可用性
+- 更细粒度的权限控制
 
 ### 5. 创建 D1 数据库
 
@@ -133,7 +150,7 @@ cp .dev.vars.example .dev.vars
 GITHUB_CLIENT_ID=your_client_id
 GITHUB_CLIENT_SECRET=your_client_secret
 JWT_SECRET=随机生成的32位以上字符串
-CF_API_TOKEN=your_cloudflare_api_token
+CF_API_TOKEN=your_cloudflare_api_token  # 可选，多账户模式可留空
 DOMAINS=example.com,example.org
 ADMIN_USERS=your_github_username
 ENCRYPTION_KEY=随机生成的32位以上字符串（用于加密敏感数据）
@@ -146,6 +163,11 @@ ALLOWED_EMAIL_DOMAINS=gmail.com,outlook.com,qq.com,163.com
 - 多域名: `example.com,example.org,example.net`
 - Zone ID 将通过 Cloudflare API **自动解析**，无需手动填写
 
+**多账户模式说明**:
+- 如果使用多账户绑定模式，可以**不设置** `CF_API_TOKEN`
+- 系统会优先使用用户绑定的账户 API Token 来解析 Zone ID 和操作 DNS
+- 每个用户可以绑定多个账户，不同域名可以绑定到不同账户
+
 **邮件通知 (可选)**:
 ```env
 # 外部 SMTP（推荐）
@@ -157,6 +179,44 @@ SMTP_FROM=noreply@example.com
 SMTP_FROM_NAME=SubDomain Hub
 ```
 不配置 SMTP 时将使用 MailChannels（Cloudflare Workers 原生免费邮件服务）。
+
+## 📧 MailChannels 邮件服务说明
+
+### 配置方式
+- 如果未配置 SMTP，系统会自动使用 MailChannels（Cloudflare Workers 原生邮件服务）
+- 无需额外配置，直接通过 Cloudflare 网络发送邮件
+- 在 `wrangler.toml` 中配置 `mail_routes` 绑定：
+
+```toml
+[[mail_routes]]
+  name = "mail"
+  destination = "your-verification@yourdomain.com"
+```
+
+### 限制与注意事项
+1. **发送频率限制** — 免费版约 100 封/天（官方未明确公开，建议控制发送量）
+2. **收件人限制** — 只能发送到已验证的域名（需要在 Cloudflare 上托管）
+3. **内容限制** — 避免被标记为垃圾邮件，建议：
+   - 使用清晰的发件人名称和地址
+   - 避免大量收件人（建议单封邮件最多 10-20 个收件人）
+   - 避免使用敏感词和垃圾邮件常见关键词
+4. **DKIM/SPF** — 确保域名已配置正确的 DNS 记录（DKIM、SPF、DMARC）
+5. **退回处理** — 建议监控退回（bounce）率，过高可能导致发送限制
+
+### 推荐配置
+```toml
+# wrangler.toml
+[[mail_routes]]
+  name = "mail"
+  destination = "noreply@yourdomain.com"
+```
+
+邮件服务中 `from` 地址建议使用 `noreply@yourdomain.com` 或 `subdomain@yourdomain.com`。
+
+### 如果邮件发送失败
+1. 检查域名是否已正确配置 Mail DNS 记录
+2. 检查发件人地址是否与 `mail_routes` 配置匹配
+3. 考虑配置外部 SMTP（如 SendGrid、Mailgun）以获得更高的发送限制和更好的投递率
 
 ### 8. 本地开发
 
@@ -173,7 +233,7 @@ npm run dev
 npx wrangler secret put GITHUB_CLIENT_ID
 npx wrangler secret put GITHUB_CLIENT_SECRET
 npx wrangler secret put JWT_SECRET
-npx wrangler secret put CF_API_TOKEN
+npx wrangler secret put CF_API_TOKEN  # 多账户模式可留空
 npx wrangler secret put DOMAINS
 npx wrangler secret put ADMIN_USERS
 npx wrangler secret put ENCRYPTION_KEY
@@ -187,6 +247,12 @@ npx wrangler secret put SMTP_USER
 npx wrangler secret put SMTP_PASS
 npx wrangler secret put SMTP_FROM
 npx wrangler secret put SMTP_FROM_NAME
+
+# 可选: 设置站点外观 Secrets
+npx wrangler secret put SITE_NAME
+npx wrangler secret put SITE_BACKGROUND_IMAGE
+npx wrangler secret put SITE_BACKGROUND_OVERLAY
+npx wrangler secret put SITE_LOGO
 
 # 部署
 npm run deploy
@@ -205,6 +271,9 @@ npm run db:migrate:remote
 | `MAX_SUBDOMAINS_PER_USER` | 每用户最多子域名数 | `1` |
 | `MAX_RECORDS_PER_SUBDOMAIN` | 每子域名最多 DNS 记录数 | `20` |
 | `SITE_NAME` | 站点名称 | `SubDomain Hub` |
+| `SITE_BACKGROUND_IMAGE` | 站点背景图 URL（支持任意图片链接） | 无 |
+| `SITE_BACKGROUND_OVERLAY` | 背景图遮罩颜色（hex 或 rgba） | `rgba(15, 23, 42, 0.7)` |
+| `SITE_LOGO` | 站点 Logo URL（建议 36x36px 透明 PNG） | 无 |
 | `EMAIL_VERIFICATION_REQUIRED` | 是否要求邮箱验证 | `true` |
 | `ALLOWED_EMAIL_DOMAINS` | 允许的邮箱域名白名单（逗号分隔） | 空=不限制 |
 
@@ -363,7 +432,9 @@ POST /api/subdomains/1/records
 - 内置禁止前缀防止滥用
 - 敏感数据（API Token）使用 AES-GCM 加密存储
 - 支持邮箱验证和邮箱域名白名单
-- 支持绑定多个 Cloudflare 账户，分散风险
+- **多账户绑定** — 支持绑定多个 Cloudflare 账户（不同域名可绑定到不同账户），不再依赖全局 `CF_API_TOKEN`
+- **环境变量保护** — 生产环境使用 `wrangler secret` 设置敏感变量，不会覆盖 Cloudflare Dashboard 已存在的环境变量
+- **密钥安全** — 已配置 `.gitignore`，确保敏感文件（`.dev.vars`、`wrangler` 目录）不会提交到 Git 仓库
 
 ## 📋 审核流程
 

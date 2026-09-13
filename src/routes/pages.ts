@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { html } from 'hono/html';
 import type { Env, User } from '../types';
 import { optionalAuthMiddleware } from '../middleware/auth';
+import { getBackgroundImage, getBackgroundOverlay, getSiteLogo, getSiteName } from '../config';
 
 type Variables = { user: User };
 
@@ -11,12 +12,41 @@ pages.use('/*', optionalAuthMiddleware);
 
 pages.get('/', (c) => {
   const user = c.get('user');
-  const siteName = c.env.SITE_NAME || 'SubDomain Hub';
+  const siteName = getSiteName(c.env);
+  const backgroundImage = getBackgroundImage(c.env);
+  const backgroundOverlay = getBackgroundOverlay(c.env);
+  const siteLogo = getSiteLogo(c.env);
 
-  return c.html(renderPage(siteName, user));
+  return c.html(renderPage({
+    siteName,
+    user,
+    backgroundImage,
+    backgroundOverlay,
+    siteLogo,
+  }));
 });
 
-function renderPage(siteName: string, user?: User) {
+function renderPage({
+  siteName,
+  user,
+  backgroundImage,
+  backgroundOverlay,
+  siteLogo,
+}: {
+  siteName: string;
+  user?: User;
+  backgroundImage?: string | null;
+  backgroundOverlay?: string;
+  siteLogo?: string | null;
+}) {
+  const bgStyle = backgroundImage
+    ? `background-image: url('${backgroundImage}'); background-size: cover; background-position: center; background-attachment: fixed;`
+    : '';
+
+  const overlayStyle = backgroundImage
+    ? `position: relative;`
+    : '';
+
   return html`<!DOCTYPE html>
 <html lang="zh-CN" data-theme="dark">
 <head>
@@ -61,6 +91,7 @@ function renderPage(siteName: string, user?: User) {
       --shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
       --shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.3);
       --glass-bg: rgba(30, 41, 59, 0.8);
+      --bg-image: var(--bg-image-dark);
     }
 
     [data-theme="light"] {
@@ -102,6 +133,27 @@ function renderPage(siteName: string, user?: User) {
       line-height: 1.6;
       min-height: 100vh;
       transition: background var(--transition), color var(--transition);
+      position: relative;
+    }
+
+    /* 背景图与遮罩 */
+    .bg-image-wrapper {
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      overflow: hidden;
+    }
+    .bg-image {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      filter: blur(2px);
+      transform: scale(1.05);
+    }
+    .bg-overlay {
+      position: absolute;
+      inset: 0;
+      background: ${backgroundOverlay || 'rgba(15, 23, 42, 0.7)'};
     }
     a { color: var(--accent); text-decoration: none; transition: all var(--transition); }
     a:hover { color: var(--accent-hover); }
@@ -1142,12 +1194,13 @@ function renderPage(siteName: string, user?: User) {
       transform: translateX(24px);
     }
   </style>
+  ${backgroundImage ? `<div class="bg-image-wrapper"><img class="bg-image" src="${backgroundImage}" alt="background" /><div class="bg-overlay"></div></div>` : ''}
 </head>
 <body>
   <header class="header">
     <div class="container">
       <a href="/" class="logo" onclick="navigate('home'); return false;">
-        <div class="logo-icon">S</div>
+        ${siteLogo ? `<img src="${siteLogo}" alt="logo" class="logo-icon" style="width:36px;height:36px;object-fit:contain;background:none;box-shadow:none;" />` : '<div class="logo-icon">S</div>'}
         <span>${siteName}</span>
       </a>
       <div class="header-actions">
@@ -1956,7 +2009,14 @@ function renderPage(siteName: string, user?: User) {
   </script>
 
   <footer class="footer">
-    <div class="container"><p>Powered by Cloudflare Workers & D1 · SubDomain Hub</p></div>
+    <div class="container">
+      <p>Powered by Cloudflare Workers & D1 · SubDomain Hub</p>
+      <p style="margin-top:8px;font-size:12px;color:var(--text-muted);">
+        感谢 <a href="https://github.com/Little100/cloudflare_subdomain_provisioning" target="_blank" rel="noopener">Little100/cloudflare_subdomain_provisioning</a> 开源项目
+        &nbsp;|&nbsp;
+        萌备 by <a href="https://github.com/moe-backup" target="_blank" rel="noopener">萌备</a>
+      </p>
+    </div>
   </footer>
 </body>
 </html>`;

@@ -152,3 +152,53 @@
 - [ ] 添加操作日志和审计追踪
 - [ ] 支持子域名转移
 - [ ] 添加 DNS 记录 TTL 预设模板
+
+## [2.1.0] - 2026-09-13
+
+### 🎉 多账户架构升级
+
+**不再依赖全局 `CF_API_TOKEN`**
+- 系统现在优先使用用户绑定的账户 API Token 来解析 Zone ID 和操作 DNS
+- 支持不同域名绑定到不同的 Cloudflare 账户
+- 全局 `CF_API_TOKEN` 变为可选（仅用于向后兼容）
+- 新增 `resolveZoneIdAndTokenFromAccounts` 函数，支持从账户列表自动匹配 Zone ID
+
+**DNS 操作改进**
+- `proxied.ts` 路由全面重构，使用多账户解析逻辑
+- 代理开关功能现在支持跨账户操作
+- 更好的错误提示（明确指出"没有可用的 Cloudflare 账户"）
+
+**UI 自定义增强**
+- 新增站点背景图支持 (`SITE_BACKGROUND_IMAGE`)
+- 新增背景图遮罩颜色配置 (`SITE_BACKGROUND_OVERLAY`)
+- 新增站点 Logo 支持 (`SITE_LOGO`)
+- Footer 添加萌备和原项目致谢
+
+**安全与兼容性**
+- 确保 `wrangler secret` 不会覆盖 Cloudflare Dashboard 已存在的环境变量
+- 更新 `.gitignore`，确保敏感文件不会提交到 Git
+- 新增环境变量类型定义（`SITE_BACKGROUND_IMAGE`, `SITE_BACKGROUND_OVERLAY`, `SITE_LOGO`）
+
+### 📝 文档更新
+
+- 更新 README.md，说明多账户模式和全局 Token 的区别
+- 新增 MailChannels 邮件服务限制说明
+- 新增站点外观配置说明
+- 新增环境变量安全配置说明
+
+### ⚠️  breaking Changes
+
+- 多账户模式下，全局 `CF_API_TOKEN` 不再必需
+- `resolveZoneIdFromAccounts` 返回类型从 `string | null` 改为 `{ zoneId, token } | null`
+
+### 🐛 Bug Fixes
+
+- 修复多账户模式下 Zone ID 解析失败的问题
+- 修复代理开关在多账户环境下的 token 匹配问题
+
+### 🔮 下一步计划
+
+- [ ] 支持 Cloudflare 账户级别的 Zone ID 缓存
+- [ ] 添加账户权限管理（只读/编辑）
+- [ ] 支持自定义邮件模板
+- [ ] 添加操作日志和审计追踪

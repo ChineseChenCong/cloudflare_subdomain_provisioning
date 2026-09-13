@@ -328,6 +328,62 @@ async function resolveZoneId(apiToken: string, domain: string): Promise<string |
 }
 
 /**
+ * 从用户绑定的多个 Cloudflare 账户中解析域名的 Zone ID
+ * 不再依赖全局 CF_API_TOKEN
+ * 返回 { zoneId, token } 或 null
+ */
+export async function resolveZoneIdAndTokenFromAccounts(
+  accounts: { account: CloudflareAccount; token: string }[],
+  domain: string
+): Promise<{ zoneId: string; token: string } | null> {
+  // 优先从账户缓存的 zone_id 匹配
+  for (const { account, token } of accounts) {
+    if (account.zone_id && account.zone_id.trim() !== '') {
+      const matched = await verifyZoneIdForDomain(token, account.zone_id, domain);
+      if (matched) {
+        return { zoneId: account.zone_id, token };
+      }
+    }
+  }
+
+  // 如果都没命中，遍历账户逐个解析
+  for (const { token } of accounts) {
+    const zoneId = await resolveZoneId(token, domain);
+    if (zoneId) {
+      return { zoneId, token };
+    }
+  }
+
+  return null;
+}
+
+/**
+ * 验证 Zone ID 是否属于指定域名
+ */
+async function verifyZoneIdForDomain(apiToken: string, zoneId: string, domain: string): Promise<boolean> {
+  try {
+    const response = await fetch(
+      `https://api.cloudflare.com/client/v4/zones/${zoneId}`,
+      {
+        headers: {
+          Authorization: `Bearer ${apiToken}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    const data = (await response.json()) as {
+      success: boolean;
+      result: { id: string; name: string };
+    };
+
+    return data.success && data.result.name === domain;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * 使用指定账户创建 DNS 记录
  */
 export async function createDnsRecordWithAccount(

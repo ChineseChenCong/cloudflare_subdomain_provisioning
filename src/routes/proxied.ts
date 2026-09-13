@@ -3,9 +3,9 @@ import type { Env, User } from '../types';
 import { authMiddleware } from '../middleware/auth';
 import { getSubdomainById, getDnsRecordById, updateDnsRecordEntry } from '../db/queries';
 import {
-  getDefaultAccount,
   getActiveAccounts,
   updateDnsRecordWithAccount,
+  resolveZoneIdAndTokenFromAccounts,
 } from '../services/cloudflare-accounts';
 
 type Variables = { user: User };
@@ -52,63 +52,54 @@ proxied.put('/records/:recordId/proxied', async (c) => {
   }
 
   try {
-    // 获取 Cloudflare 账户
+    // 获取用户的活跃 Cloudflare 账户（不再依赖全局 CF_API_TOKEN）
     const activeAccounts = await getActiveAccounts(c.env.DB, user.id);
 
     if (activeAccounts.length === 0) {
-      return c.json({ error: '没有可用的 Cloudflare 账户' }, 400);
+      return c.json({ error: '没有可用的 Cloudflare 账户，请先在账户管理中添加' }, 400);
     }
 
-    // 尝试使用活跃账户更新
-    let lastError: Error | null = null;
+    // 从用户绑定的账户中解析 Zone ID 和对应的 token
+    const resolved = await resolveZoneIdAndTokenFromAccounts(activeAccounts, subdomain.domain);
+    if (!resolved) {
+      return c.json({ error: `无法解析域名 ${subdomain.domain} 的 Zone ID，请检查账户权限` }, 400);
+    }
 
-    for (const { token } of activeAccounts) {
-      try {
-        const zoneId = await getZoneIdForDomain(token, subdomain.domain);
-        if (!zoneId) {
-          continue;
-        }
+    const { zoneId, token: accountToken } = resolved;
 
-        await updateDnsRecordWithAccount(
-          token,
-          zoneId,
-          record.cf_record_id,
-          {
-            type: record.record_type,
-            name: record.name,
-            content: record.content,
-            ttl: record.ttl,
-            priority: record.priority ?? undefined,
-            proxied: body.proxied,
-          }
-        );
-
-        // 更新本地数据库
-        await updateDnsRecordEntry(
-          c.env.DB,
-          record.id,
-          record.cf_record_id,
-          record.record_type,
-          record.name,
-          record.content,
-          record.ttl,
-          record.priority,
-          body.proxied,
-          record.comment
-        );
-
-        return c.json({
-          success: true,
-          proxied: body.proxied,
-          message: body.proxied ? '已开启代理（黄色云朵）' : '已关闭代理（灰色云朵）',
-        });
-      } catch (err) {
-        lastError = err as Error;
-        continue;
+    await updateDnsRecordWithAccount(
+      accountToken,
+      zoneId,
+      record.cf_record_id,
+      {
+        type: record.record_type,
+        name: record.name,
+        content: record.content,
+        ttl: record.ttl,
+        priority: record.priority ?? undefined,
+        proxied: body.proxied,
       }
-    }
+    );
 
-    throw lastError || new Error('更新失败');
+    // 更新本地数据库
+    await updateDnsRecordEntry(
+      c.env.DB,
+      record.id,
+      record.cf_record_id,
+      record.record_type,
+      record.name,
+      record.content,
+      record.ttl,
+      record.priority,
+      body.proxied,
+      record.comment
+    );
+
+    return c.json({
+      success: true,
+      proxied: body.proxied,
+      message: body.proxied ? '已开启代理（黄色云朵）' : '已关闭代理（灰色云朵）',
+    });
   } catch (err: any) {
     return c.json({ error: `切换代理状态失败: ${err.message}` }, 500);
   }
@@ -147,13 +138,6 @@ proxied.put('/subdomains/:subdomainId/records/proxied', async (c) => {
   // 筛选支持代理的记录
   const supportedRecords = records.filter(r => ['A', 'AAAA', 'CNAME'].includes(r.record_type));
 
-  if (body.record_ids && body.record_ids.length > 0) {
-    const targetRecords = supportedRecords.filter(r => body.record_ids!.includes(r.id));
-    if (targetRecords.length === 0) {
-      return c.json({ error: '没有找到可操作的记录' }, 400);
-    }
-  }
-
   const targetRecords = body.record_ids && body.record_ids.length > 0
     ? supportedRecords.filter(r => body.record_ids!.includes(r.id))
     : supportedRecords;
@@ -163,62 +147,55 @@ proxied.put('/subdomains/:subdomainId/records/proxied', async (c) => {
   }
 
   try {
-    // 获取 Cloudflare 账户
+    // 获取用户的活跃 Cloudflare 账户
     const activeAccounts = await getActiveAccounts(c.env.DB, user.id);
 
     if (activeAccounts.length === 0) {
-      return c.json({ error: '没有可用的 Cloudflare 账户' }, 400);
+      return c.json({ error: '没有可用的 Cloudflare 账户，请先在账户管理中添加' }, 400);
     }
+
+    // 从用户绑定的账户中解析 Zone ID 和对应的 token
+    const resolved = await resolveZoneIdAndTokenFromAccounts(activeAccounts, subdomain.domain);
+    if (!resolved) {
+      return c.json({ error: `无法解析域名 ${subdomain.domain} 的 Zone ID，请检查账户权限` }, 400);
+    }
+
+    const { zoneId, token: accountToken } = resolved;
 
     let successCount = 0;
     let failCount = 0;
 
     for (const record of targetRecords) {
-      let updated = false;
-
-      for (const { token } of activeAccounts) {
-        try {
-          const zoneId = await getZoneIdForDomain(token, subdomain.domain);
-          if (!zoneId) {
-            continue;
+      try {
+        await updateDnsRecordWithAccount(
+          accountToken,
+          zoneId,
+          record.cf_record_id,
+          {
+            type: record.record_type,
+            name: record.name,
+            content: record.content,
+            ttl: record.ttl,
+            priority: record.priority ?? undefined,
+            proxied: body.proxied,
           }
+        );
 
-          await updateDnsRecordWithAccount(
-            token,
-            zoneId,
-            record.cf_record_id,
-            {
-              type: record.record_type,
-              name: record.name,
-              content: record.content,
-              ttl: record.ttl,
-              priority: record.priority ?? undefined,
-              proxied: body.proxied,
-            }
-          );
+        await updateDnsRecordEntry(
+          c.env.DB,
+          record.id,
+          record.cf_record_id,
+          record.record_type,
+          record.name,
+          record.content,
+          record.ttl,
+          record.priority,
+          body.proxied,
+          record.comment
+        );
 
-          await updateDnsRecordEntry(
-            c.env.DB,
-            record.id,
-            record.cf_record_id,
-            record.record_type,
-            record.name,
-            record.content,
-            record.ttl,
-            record.priority,
-            body.proxied,
-            record.comment
-          );
-
-          successCount++;
-          updated = true;
-          break;
-        } catch (err) {
-          continue;
-        }
-      }
-
-      if (!updated) {
+        successCount++;
+      } catch (err) {
         failCount++;
       }
     }
@@ -233,32 +210,5 @@ proxied.put('/subdomains/:subdomainId/records/proxied', async (c) => {
     return c.json({ error: `批量切换失败: ${err.message}` }, 500);
   }
 });
-
-async function getZoneIdForDomain(apiToken: string, domain: string): Promise<string | null> {
-  try {
-    const response = await fetch(
-      `https://api.cloudflare.com/client/v4/zones?name=${encodeURIComponent(domain)}&status=active`,
-      {
-        headers: {
-          Authorization: `Bearer ${apiToken}`,
-          'Content-Type': 'application/json',
-        },
-      }
-    );
-
-    const data = (await response.json()) as {
-      success: boolean;
-      result: Array<{ id: string; name: string }>;
-    };
-
-    if (data.success && data.result.length > 0) {
-      return data.result[0].id;
-    }
-  } catch (err) {
-    console.error(`Failed to resolve zone ID for ${domain}:`, err);
-  }
-
-  return null;
-}
 
 export default proxied;

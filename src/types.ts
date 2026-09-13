@@ -10,6 +10,10 @@ export interface Env {
   MAX_RECORDS_PER_SUBDOMAIN: string;
   ADMIN_USERS?: string;
   SITE_NAME: string;
+  // 站点背景图与 Logo（可选）
+  SITE_BACKGROUND_IMAGE?: string;
+  SITE_BACKGROUND_OVERLAY?: string;
+  SITE_LOGO?: string;
   // SMTP 邮件通知（可选）
   SMTP_HOST?: string;
   SMTP_PORT?: string;
