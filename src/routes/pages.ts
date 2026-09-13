@@ -1703,7 +1703,7 @@ function renderPage({
               '<button class="btn btn-sm" onclick="sendVerificationEmail()">发送验证邮件</button>'
             : '<p>📧 您还没有绑定邮箱，请先绑定邮箱后即可申请子域名</p>' +
               '<div class="verify-binder">' +
-              '<input type="email" class="form-input" id="bind-email" placeholder="name@' + ((state.allowedEmailDomains && state.allowedEmailDomains[0]) || 'example.com').replace(/\*/g, '') + '" onkeydown="if(event.key===\'Enter\'){bindEmail();}" />' +
+              '<input type="email" class="form-input" id="bind-email" placeholder="name@' + ((state.allowedEmailDomains && state.allowedEmailDomains[0]) || 'example.com').replace(/\\*/g, '') + '" onkeydown="if(event.key===\\Enter\\'){bindEmail();}" />' +
               '<button class="btn btn-primary btn-sm btn-jelly" onclick="bindEmail()">绑定并发送验证邮件</button>' +
               '</div>') +
           '</div>' +
@@ -2221,7 +2221,7 @@ function renderPage({
       const input = document.getElementById('bind-email');
       const email = input?.value?.trim().toLowerCase();
       if (!email) { toast('请输入邮箱地址', 'error'); return; }
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) { toast('邮箱格式不正确', 'error'); return; }
+      if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]{2,}$/.test(email)) { toast('邮箱格式不正确', 'error'); return; }
       try {
         const res = await api('/verification/bind', { method: 'POST', body: JSON.stringify({ email }) });
         state.user.email = email;
