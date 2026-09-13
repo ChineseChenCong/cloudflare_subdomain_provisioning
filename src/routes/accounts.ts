@@ -21,14 +21,14 @@ accounts.use('/*', authMiddleware);
 // 获取用户的 Cloudflare 账户列表
 accounts.get('/', async (c) => {
   const user = c.get('user');
-  const accountsList = await getUserAccounts(c.env.DB, user.id);
+  const accountsList = await getUserAccounts(c.env.DB, c.env, user.id);
   return c.json({ accounts: accountsList });
 });
 
 // 获取默认账户
 accounts.get('/default', async (c) => {
   const user = c.get('user');
-  const defaultAccount = await getDefaultAccount(c.env.DB, user.id);
+  const defaultAccount = await getDefaultAccount(c.env.DB, c.env, user.id);
   if (!defaultAccount) {
     return c.json({ account: null });
   }

@@ -273,7 +273,10 @@ npm run db:migrate:remote
 | `SITE_NAME` | 站点名称 | `SubDomain Hub` |
 | `SITE_BACKGROUND_IMAGE` | 站点背景图 URL（支持任意图片链接） | 无 |
 | `SITE_BACKGROUND_OVERLAY` | 背景图遮罩颜色（hex 或 rgba） | `rgba(15, 23, 42, 0.7)` |
-| `SITE_LOGO` | 站点 Logo URL（建议 36x36px 透明 PNG） | 无 |
+| `SITE_LOGO` | 站点 Logo URL（建议 36x36px 透明 PNG，未配置使用内置默认萌系 Logo） | 内置默认 Logo |
+| `SITE_BEIAN` | 底部备案信息（虚拟备案项目，如 `浙ICP备12345678号-1`；未配置则不显示） | 空=不显示 |
+| `FRIEND_LINKS` | 友情链接（JSON 数组，如 `[{"name":"博客","url":"https://..."}]`） | 空=不显示 |
+| `ADMIN_CONTACT_EMAIL` | 联系管理员邮箱（配置后底部显示"联系管理员"按钮，邮件联系） | 空=不显示 |
 | `EMAIL_VERIFICATION_REQUIRED` | 是否要求邮箱验证 | `true` |
 | `ALLOWED_EMAIL_DOMAINS` | 允许的邮箱域名白名单（逗号分隔） | 空=不限制 |
 

@@ -1,4 +1,13 @@
-import type { Env, User, Subdomain, DnsRecord, CloudflareAccount, EmailVerification } from '../types';
+import type { Env, User, Subdomain, DnsRecord, CloudflareAccount, EmailVerification, Announcement } from '../types';
+
+export interface FriendLinkWithId {
+  id: number;
+  name: string;
+  url: string;
+  description: string | null;
+  sort_order: number;
+  created_at: string;
+}
 
 // ==================== Users ====================
 
@@ -553,4 +562,86 @@ export async function removeEmailDomainFromWhitelist(
     .prepare('UPDATE email_domain_whitelist SET is_enabled = 0 WHERE domain = ?')
     .bind(domain.toLowerCase())
     .run();
+}
+
+// ==================== Announcements (公告) ====================
+
+export async function getActiveAnnouncements(db: D1Database): Promise<Announcement[]> {
+  const result = await db
+    .prepare('SELECT * FROM announcements WHERE is_active = 1 ORDER BY created_at DESC, id DESC')
+    .all<Announcement>();
+  return result.results;
+}
+
+export async function getAllAnnouncements(db: D1Database): Promise<Announcement[]> {
+  const result = await db
+    .prepare('SELECT * FROM announcements ORDER BY created_at DESC, id DESC')
+    .all<Announcement>();
+  return result.results;
+}
+
+export async function createAnnouncement(
+  db: D1Database,
+  title: string,
+  content: string,
+  createdBy: number | null
+): Promise<Announcement | null> {
+  const result = await db
+    .prepare(
+      'INSERT INTO announcements (title, content, is_active, created_by) VALUES (?, ?, 1, ?)'
+    )
+    .bind(title, content, createdBy)
+    .run();
+
+  const id = result.meta.last_row_id;
+  return db
+    .prepare('SELECT * FROM announcements WHERE id = ?')
+    .bind(id)
+    .first<Announcement>();
+}
+
+export async function updateAnnouncement(
+  db: D1Database,
+  id: number,
+  updates: { title?: string; content?: string; is_active?: boolean }
+): Promise<Announcement | null> {
+  const setParts: string[] = [];
+  const values: unknown[] = [];
+
+  if (updates.title !== undefined) {
+    setParts.push('title = ?');
+    values.push(updates.title);
+  }
+  if (updates.content !== undefined) {
+    setParts.push('content = ?');
+    values.push(updates.content);
+  }
+  if (updates.is_active !== undefined) {
+    setParts.push('is_active = ?');
+    values.push(updates.is_active ? 1 : 0);
+  }
+  setParts.push('updated_at = datetime("now")');
+
+  if (setParts.length === 1) return null;
+
+  values.push(id);
+  await db
+    .prepare(`UPDATE announcements SET ${setParts.join(', ')} WHERE id = ?`)
+    .bind(...values)
+    .run();
+
+  return db.prepare('SELECT * FROM announcements WHERE id = ?').bind(id).first<Announcement>();
+}
+
+export async function deleteAnnouncement(db: D1Database, id: number): Promise<void> {
+  await db.prepare('DELETE FROM announcements WHERE id = ?').bind(id).run();
+}
+
+// ==================== Friend Links (友情链接，数据库版备用) ====================
+
+export async function getFriendLinksFromDb(db: D1Database): Promise<FriendLinkWithId[]> {
+  const result = await db
+    .prepare('SELECT * FROM friend_links ORDER BY sort_order ASC, id ASC')
+    .all<FriendLinkWithId>();
+  return result.results;
 }

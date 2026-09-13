@@ -1,6 +1,6 @@
 import type { Env, EmailVerification } from '../types';
 import { generateToken } from './crypto';
-import { sendEmail, buildVerificationEmail } from './email';
+import { sendEmail } from './email';
 
 /**
  * 检查邮箱域名是否在白名单中

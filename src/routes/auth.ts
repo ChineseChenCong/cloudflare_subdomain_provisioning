@@ -118,9 +118,14 @@ auth.get('/github/callback', async (c) => {
     }
 
     return c.redirect('/');
-  } catch (err) {
+  } catch (err: any) {
     console.error('OAuth callback error:', err);
-    return c.json({ error: '登录失败，请重试' }, 500);
+    // 返回具体错误方便排查（多为 JWT_SECRET 未配置 / GITHUB_CLIENT_SECRET 错误 / 回调地址不匹配）
+    const msg = err?.message || '未知错误';
+    const detail = /(key|JWT_SECRET|signature|importKey)/i.test(msg)
+      ? '服务器 JWT_SECRET 未正确配置'
+      : msg;
+    return c.json({ error: `登录失败：${detail}` }, 500);
   }
 });
 

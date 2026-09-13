@@ -53,7 +53,7 @@ proxied.put('/records/:recordId/proxied', async (c) => {
 
   try {
     // 获取用户的活跃 Cloudflare 账户（不再依赖全局 CF_API_TOKEN）
-    const activeAccounts = await getActiveAccounts(c.env.DB, user.id);
+    const activeAccounts = await getActiveAccounts(c.env.DB, c.env, user.id);
 
     if (activeAccounts.length === 0) {
       return c.json({ error: '没有可用的 Cloudflare 账户，请先在账户管理中添加' }, 400);
@@ -148,7 +148,7 @@ proxied.put('/subdomains/:subdomainId/records/proxied', async (c) => {
 
   try {
     // 获取用户的活跃 Cloudflare 账户
-    const activeAccounts = await getActiveAccounts(c.env.DB, user.id);
+    const activeAccounts = await getActiveAccounts(c.env.DB, c.env, user.id);
 
     if (activeAccounts.length === 0) {
       return c.json({ error: '没有可用的 Cloudflare 账户，请先在账户管理中添加' }, 400);

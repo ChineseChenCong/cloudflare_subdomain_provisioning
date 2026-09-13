@@ -11,7 +11,7 @@ const TAG_LENGTH = 128;
 /**
  * 从环境变量获取加密密钥
  */
-export function getEncryptionKey(env: { ENCRYPTION_KEY?: string }): CryptoKey | null {
+export async function getEncryptionKey(env: { ENCRYPTION_KEY?: string }): Promise<CryptoKey | null> {
   if (!env.ENCRYPTION_KEY) {
     return null;
   }
@@ -41,7 +41,7 @@ export async function encryptText(
   env: { ENCRYPTION_KEY?: string },
   plaintext: string
 ): Promise<string | null> {
-  const key = getEncryptionKey(env);
+  const key = await getEncryptionKey(env);
   if (!key) {
     console.warn('ENCRYPTION_KEY not configured, data will not be encrypted');
     return plaintext; // 降级处理：返回明文
@@ -77,7 +77,7 @@ export async function decryptText(
   env: { ENCRYPTION_KEY?: string },
   encrypted: string
 ): Promise<string | null> {
-  const key = getEncryptionKey(env);
+  const key = await getEncryptionKey(env);
   if (!key) {
     console.warn('ENCRYPTION_KEY not configured, returning data as-is');
     return encrypted; // 降级处理

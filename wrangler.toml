@@ -30,3 +30,17 @@ EMAIL_VERIFICATION_REQUIRED = "true"
 
 # 允许的邮箱域名白名单（逗号分隔，空=不限制）
 ALLOWED_EMAIL_DOMAINS = "gmail.com,outlook.com,qq.com,163.com,126.com,foxmail.com,icloud.com"
+
+# ========== 站点外观（可选） ==========
+# SITE_BACKGROUND_IMAGE = "https://..."
+# SITE_BACKGROUND_OVERLAY = "rgba(15, 23, 42, 0.7)"
+# SITE_LOGO = "https://..."
+
+# ========== 友情链接（可选） ==========
+# FRIEND_LINKS = '[{"name":"我的博客","url":"https://blog.example.com"}]'
+
+# ========== 联系管理员邮箱（可选，底部显示"联系管理员"按钮） ==========
+# ADMIN_CONTACT_EMAIL = "admin@example.com"
+
+# ========== 备案信息（可选，虚拟备案项目，未配置不显示） ==========
+# SITE_BEIAN = "浙ICP备12345678号-1"

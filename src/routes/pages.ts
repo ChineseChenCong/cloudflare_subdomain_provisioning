@@ -2,7 +2,15 @@ import { Hono } from 'hono';
 import { html } from 'hono/html';
 import type { Env, User } from '../types';
 import { optionalAuthMiddleware } from '../middleware/auth';
-import { getBackgroundImage, getBackgroundOverlay, getSiteLogo, getSiteName } from '../config';
+import {
+  getBackgroundImage,
+  getBackgroundOverlay,
+  getSiteLogo,
+  getSiteName,
+  getSiteBeian,
+  getFriendLinks,
+  getAdminContactEmail,
+} from '../config';
 
 type Variables = { user: User };
 
@@ -16,6 +24,9 @@ pages.get('/', (c) => {
   const backgroundImage = getBackgroundImage(c.env);
   const backgroundOverlay = getBackgroundOverlay(c.env);
   const siteLogo = getSiteLogo(c.env);
+  const beian = getSiteBeian(c.env);
+  const friendLinks = getFriendLinks(c.env);
+  const adminContactEmail = getAdminContactEmail(c.env);
 
   return c.html(renderPage({
     siteName,
@@ -23,6 +34,9 @@ pages.get('/', (c) => {
     backgroundImage,
     backgroundOverlay,
     siteLogo,
+    beian,
+    friendLinks,
+    adminContactEmail,
   }));
 });
 
@@ -32,12 +46,18 @@ function renderPage({
   backgroundImage,
   backgroundOverlay,
   siteLogo,
+  beian,
+  friendLinks,
+  adminContactEmail,
 }: {
   siteName: string;
   user?: User;
   backgroundImage?: string | null;
   backgroundOverlay?: string;
   siteLogo?: string | null;
+  beian?: string;
+  friendLinks?: { name: string; url: string }[];
+  adminContactEmail?: string;
 }) {
   const bgStyle = backgroundImage
     ? `background-image: url('${backgroundImage}'); background-size: cover; background-position: center; background-attachment: fixed;`
@@ -46,6 +66,9 @@ function renderPage({
   const overlayStyle = backgroundImage
     ? `position: relative;`
     : '';
+
+  // 默认 Logo（萌系 Cloudflare 卫星风格 SVG）
+  const defaultLogoSvg = `<svg viewBox="0 0 64 64" width="38" height="38" xmlns="http://www.w3.org/2000/svg" style="border-radius:12px"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3b82f6"/><stop offset=".5" stop-color="#8b5cf6"/><stop offset="1" stop-color="#ec4899"/></linearGradient></defs><rect x="2" y="2" width="60" height="60" rx="14" fill="url(#lg)"/><circle cx="32" cy="32" r="14" fill="#fff" opacity=".95"/><g fill="#3b82f6"><circle cx="27" cy="28" r="4"/><circle cx="37" cy="28" r="4"/><circle cx="28" cy="25" r="2.2"/><circle cx="38" cy="25" r="2.2"/><path d="M23 34c2-4 5-3 5-3h8s3-1 5 3l1 4H22z" fill="#2563eb"/><path d="M24 35c1.6-2.6 4-2 4-2h8s2.4-.6 4 2" fill="none" stroke="#60a5fa" stroke-width="2" stroke-linecap="round"/></g></svg>`;
 
   return html`<!DOCTYPE html>
 <html lang="zh-CN" data-theme="dark">
@@ -1059,6 +1082,17 @@ function renderPage({
     .shake:hover {
       animation: shake 0.5s ease;
     }
+
+    /* 持续脉动发光（Cloudflare 加速图标用，自动播放） */
+    .pulse-soft {
+      display: inline-block;
+      animation: pulseSoft 2.4s ease-in-out infinite;
+      filter: drop-shadow(0 0 6px rgba(245, 158, 11, 0.5));
+    }
+    @keyframes pulseSoft {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.18); opacity: 0.75; }
+    }
     @keyframes shake {
       0%, 100% { transform: translateX(0); }
       25% { transform: translateX(-5px); }
@@ -1072,6 +1106,46 @@ function renderPage({
       font-size: 13px; 
       border-top: 1px solid var(--border); 
       margin-top: 60px; 
+    }
+    .footer-friendlinks {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+    .friend-link-label {
+      font-weight: 600;
+      color: var(--text-secondary);
+    }
+    .friend-link {
+      display: inline-block;
+      padding: 6px 14px;
+      border-radius: 999px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    .friend-link:hover {
+      color: white;
+      background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+      border-color: transparent;
+      transform: translateY(-3px) scale(1.05);
+      box-shadow: 0 6px 16px rgba(59, 130, 246, 0.35);
+    }
+    .contact-admin-btn {
+      background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+      color: #fff;
+      padding: 10px 20px;
+    }
+    .contact-admin-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 18px rgba(139, 92, 246, 0.4);
+      color: #fff;
     }
 
     /* 账户选择下拉 */
@@ -1107,6 +1181,44 @@ function renderPage({
     .account-select-item.active {
       background: var(--accent-bg);
       color: var(--accent);
+    }
+
+    /* ========== 公告横幅 ========== */
+    .announcements-container {
+      margin-top: 16px;
+    }
+    .announcement-card {
+      background: linear-gradient(135deg, rgba(59, 130, 246, 0.12), rgba(139, 92, 246, 0.12));
+      border: 1px solid var(--accent-border);
+      border-radius: var(--radius);
+      padding: 14px 18px;
+      margin-bottom: 12px;
+      backdrop-filter: blur(8px);
+      transition: all var(--transition);
+    }
+    .announcement-card:hover {
+      border-color: var(--accent);
+      transform: translateY(-2px);
+    }
+    .announcement-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--accent);
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .announcement-date {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-weight: 400;
+      margin-left: auto;
+    }
+    .announcement-content {
+      font-size: 13px;
+      color: var(--text-secondary);
+      line-height: 1.7;
     }
 
     /* 邮箱验证提示 */
@@ -1193,14 +1305,63 @@ function renderPage({
     .switch.active::after {
       transform: translateX(24px);
     }
+
+    /* ========== 可爱 UI 增强 ========== */
+    /* 品牌渐变文字 */
+    .gradient-text {
+      background: linear-gradient(120deg, #60a5fa, #a78bfa, #f472b6);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    /* 特性卡片悬浮轻微上浮 + 柔和光晕 */
+    .feature-card {
+      transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.35s ease;
+    }
+    .feature-card:hover {
+      transform: translateY(-6px) scale(1.02);
+      box-shadow: 0 14px 30px rgba(139, 92, 246, 0.18), 0 2px 8px rgba(0,0,0,0.06);
+    }
+    /* 主要按钮果冻呼吸光晕（仅主按钮，安全叠加） */
+    .btn-primary.btn-jelly {
+      background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+      background-size: 200% 200%;
+      animation: gradientShift 6s ease infinite;
+    }
+    @keyframes gradientShift {
+      0%, 100% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+    }
+    /* 页面右侧/底部可爱的漂浮装饰气泡 */
+    .deco-bubble {
+      position: fixed;
+      border-radius: 50%;
+      pointer-events: none;
+      z-index: -1;
+      filter: blur(3px);
+      opacity: 0.35;
+      animation: bubbleFloat 12s ease-in-out infinite;
+    }
+    @keyframes bubbleFloat {
+      0%, 100% { transform: translateY(0) translateX(0); }
+      50% { transform: translateY(-26px) translateX(14px); }
+    }
+    /* 面板切换淡入 */
+    .section-header { animation: fadeIn 0.5s ease; }
   </style>
+  
   ${backgroundImage ? `<div class="bg-image-wrapper"><img class="bg-image" src="${backgroundImage}" alt="background" /><div class="bg-overlay"></div></div>` : ''}
 </head>
 <body>
+  <!-- 可爱的漂浮装饰气泡 -->
+  <div class="deco-bubble" style="width:120px;height:120px;top:18%;right:-30px;background:linear-gradient(135deg,#38bdf8,#818cf8);"></div>
+  <div class="deco-bubble" style="width:90px;height:90px;bottom:12%;left:-24px;background:linear-gradient(135deg,#f472b6,#a78bfa);animation-delay:-4s;"></div>
+  <div class="deco-bubble" style="width:64px;height:64px;top:60%;right:6%;background:linear-gradient(135deg,#34d399,#38bdf8);animation-delay:-8s;"></div>
+
   <header class="header">
     <div class="container">
       <a href="/" class="logo" onclick="navigate('home'); return false;">
-        ${siteLogo ? `<img src="${siteLogo}" alt="logo" class="logo-icon" style="width:36px;height:36px;object-fit:contain;background:none;box-shadow:none;" />` : '<div class="logo-icon">S</div>'}
+        ${siteLogo ? `<img src="${siteLogo}" alt="logo" class="logo-icon" style="width:36px;height:36px;object-fit:contain;background:none;box-shadow:none;border-radius:12px;" />` : `<div class="logo-icon">${defaultLogoSvg}</div>`}
         <span>${siteName}</span>
       </a>
       <div class="header-actions">
@@ -1211,6 +1372,8 @@ function renderPage({
       </div>
     </div>
   </header>
+
+  <div id="announcements" class="container announcements-container"></div>
 
   <main id="app" class="container">
     <div class="loading-center"><div class="spinner"></div></div>
@@ -1269,6 +1432,8 @@ function renderPage({
       adminPending: [],
       adminAll: [],
       adminUsers: [],
+      adminAnnouncements: [],
+      editingAnnouncement: null,
       // Cloudflare accounts
       accounts: [],
       selectedAccount: null,
@@ -1281,6 +1446,17 @@ function renderPage({
     // ==================== API ====================
     async function api(path, opts = {}) {
       const res = await fetch('/api' + path, {
+        headers: { 'Content-Type': 'application/json', ...opts.headers },
+        ...opts,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || '请求失败');
+      return data;
+    }
+
+    // 公告接口（挂在顶层 /announcements 而非 /api，公开列表以及 /admin 管理均用 cookie 认证）
+    async function annApi(path, opts = {}) {
+      const res = await fetch('/announcements' + path, {
         headers: { 'Content-Type': 'application/json', ...opts.headers },
         ...opts,
       });
@@ -1375,7 +1551,7 @@ function renderPage({
     // ==================== Landing ====================
     function renderLanding() {
       return '<div class="hero fade-in">' +
-        '<h1>获取你的专属子域名</h1>' +
+        '<h1 class="gradient-text">获取你的专属子域名</h1>' +
         '<p>通过 GitHub 登录，申请属于自己的二级域名，经管理员审核后即可获得完整 DNS 控制权。</p>' +
         '<a href="/auth/github" class="btn btn-github btn-jelly">' +
         '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" style="margin-right:8px"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61-.546-1.387-1.333-1.756-1.333-1.756-1.09-.744.083-.729.083-.729 1.205.085 1.838 1.237 1.838 1.237 1.07 1.834 2.809 1.304 3.495.997.108-.776.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.3 1.23A11.51 11.51 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.29-1.552 3.297-1.23 3.297-1.23.653 1.652.242 2.873.118 3.176.77.84 1.235 1.91 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222 0 1.604-.015 2.898-.015 3.293 0 .322.216.694.825.576C20.565 21.795 24 17.295 24 12c0-6.63-5.37-12-12-12z"/></svg>' +
@@ -1384,7 +1560,7 @@ function renderPage({
         '<div class="features">' +
         '<div class="card feature-card card-hover"><div class="feature-icon bounce">' + icons.globe + '</div><h3>安全分配</h3><p>管理员审核通过后，即可获得专属子域名</p></div>' +
         '<div class="card feature-card card-hover"><div class="feature-icon float">' + icons.tool + '</div><h3>完整 DNS 控制</h3><p>支持 A、AAAA、CNAME、MX、TXT、SRV、CAA 全类型记录</p></div>' +
-        '<div class="card feature-card card-hover"><div class="feature-icon shake">' + icons.shield + '</div><h3>Cloudflare 加速</h3><p>依托 Cloudflare 全球网络，享受 CDN 加速与 DDoS 防护</p></div>' +
+        '<div class="card feature-card card-hover"><div class="feature-icon pulse-soft">' + icons.shield + '</div><h3>Cloudflare 加速</h3><p>依托 Cloudflare 全球网络，享受 CDN 加速与 DDoS 防护</p></div>' +
         '</div>';
     }
 
@@ -1665,14 +1841,16 @@ function renderPage({
     // ==================== Admin Panel ====================
     async function loadAdminData() {
       try {
-        const [pendingData, allData, userData] = await Promise.all([
+        const [pendingData, allData, userData, annData] = await Promise.all([
           api('/admin/pending'),
           api('/admin/subdomains'),
           api('/admin/users'),
+          annApi('/admin'),
         ]);
         state.adminPending = pendingData.subdomains;
         state.adminAll = allData.subdomains;
         state.adminUsers = userData.users;
+        state.adminAnnouncements = annData.announcements || [];
       } catch (err) { toast(err.message, 'error'); }
     }
 
@@ -1689,12 +1867,15 @@ function renderPage({
         (pendingCount > 0 ? '<span class="tab-count">'+pendingCount+'</span>' : '') + '</button>' +
         '<button class="tab'+(state.adminTab==='all'?' active':'')+'" onclick="switchAdminTab(\\'all\\')">所有子域名</button>' +
         '<button class="tab'+(state.adminTab==='users'?' active':'')+'" onclick="switchAdminTab(\\'users\\')">用户管理</button>' +
+        '<button class="tab'+(state.adminTab==='announcements'?' active':'')+'" onclick="switchAdminTab(\\'announcements\\')">公告管理</button>' +
         '</div>';
 
       if (state.adminTab === 'pending') {
         h += renderAdminPending();
       } else if (state.adminTab === 'all') {
         h += renderAdminAll();
+      } else if (state.adminTab === 'announcements') {
+        h += renderAdminAnnouncements();
       } else {
         h += renderAdminUsers();
       }
@@ -1766,6 +1947,99 @@ function renderPage({
       });
       h += '</tbody></table></div></div>';
       return h;
+    }
+
+    // ==================== 公告管理 ====================
+    function renderAdminAnnouncements() {
+      const items = state.adminAnnouncements;
+
+      // 新增/编辑表单（临时用 DOM 输入，编辑时复用）
+      let h = '<div class="section" style="margin-bottom:16px">' +
+        '<div class="card">' +
+        '<div class="card-title">📢 发布 / 编辑公告</div>' +
+        '<div class="form-group"><label class="form-label">公告标题</label>' +
+        '<input type="text" class="form-input" id="ann-title" placeholder="输入标题…" value="' + (escapeHtml(state.editingAnnouncement?.title || '')) + '" /></div>' +
+        '<div class="form-group"><label class="form-label">公告内容</label>' +
+        '<textarea class="form-input" id="ann-content" rows="4" placeholder="输入公告内容…" style="min-height:100px">' + (escapeHtml(state.editingAnnouncement?.content || '')) + '</textarea></div>' +
+        '<div style="display:flex;gap:8px;margin-top:4px">' +
+        '<button class="btn btn-primary btn-jelly" onclick="saveAnnouncement()">' + (state.editingAnnouncement ? '保存修改' : '发布公告') + '</button>' +
+        (state.editingAnnouncement ? '<button class="btn btn-ghost" onclick="cancelEditAnnouncement()">取消编辑</button>' : '') +
+        '</div>' +
+        '</div></div>';
+
+      if (items.length === 0) {
+        h += '<div class="card empty"><div class="empty-icon">' + icons.clipboard + '</div><p>暂无公告</p></div>';
+        return h;
+      }
+
+      h += '<div class="card"><div class="table-wrap"><table>' +
+        '<thead><tr><th>标题</th><th>状态</th><th>创建时间</th><th>操作</th></tr></thead><tbody>';
+      items.forEach(a => {
+        h += '<tr><td><strong>' + escapeHtml(a.title) + '</strong><div style="font-size:12px;color:var(--text-muted)">' + escapeHtml(a.content) + '</div></td>' +
+          '<td>' + (a.is_active ? '<span class="badge badge-approved">显示中</span>' : '<span class="badge">已隐藏</span>') + '</td>' +
+          '<td>' + new Date(a.created_at).toLocaleDateString('zh-CN') + '</td>' +
+          '<td style="display:flex;gap:6px">' +
+          '<button class="btn btn-sm btn-primary btn-jelly" onclick="startEditAnnouncement(' + a.id + ')">编辑</button>' +
+          '<button class="btn btn-sm ' + (a.is_active ? 'btn-ghost' : 'btn-primary') + '" onclick="toggleAnnouncement(' + a.id + ')">' + (a.is_active ? '隐藏' : '显示') + '</button>' +
+          '<button class="btn btn-sm btn-danger" onclick="deleteAnnouncement(' + a.id + ',\\'' + escapeHtml(a.title) + '\\')">删除</button>' +
+          '</td></tr>';
+      });
+      h += '</tbody></table></div></div>';
+      return h;
+    }
+
+    function startEditAnnouncement(id) {
+      const a = state.adminAnnouncements.find(x => x.id === id);
+      if (a) { state.editingAnnouncement = a; }
+      render();
+    }
+
+    function cancelEditAnnouncement() {
+      state.editingAnnouncement = null;
+      render();
+    }
+
+    async function saveAnnouncement() {
+      const title = document.getElementById('ann-title')?.value?.trim();
+      const content = document.getElementById('ann-content')?.value?.trim();
+      if (!title) { toast('请输入公告标题', 'error'); return; }
+      if (!content) { toast('请输入公告内容', 'error'); return; }
+
+      try {
+        const editing = state.editingAnnouncement;
+        if (editing) {
+          await annApi('/admin/' + editing.id, { method: 'PUT', body: JSON.stringify({ title, content }) });
+          toast('公告已更新', 'success');
+        } else {
+          await annApi('/admin', { method: 'POST', body: JSON.stringify({ title, content }) });
+          toast('公告已发布', 'success');
+        }
+        state.editingAnnouncement = null;
+        await loadAdminData();
+        render();
+      } catch (err) { toast(err.message, 'error'); }
+    }
+
+    async function toggleAnnouncement(id) {
+      const a = state.adminAnnouncements.find(x => x.id === id);
+      if (!a) return;
+      try {
+        await annApi('/admin/' + id, { method: 'PUT', body: JSON.stringify({ is_active: !a.is_active }) });
+        toast(a.is_active ? '公告已隐藏' : '公告已显示', 'success');
+        await loadAdminData();
+        render();
+      } catch (err) { toast(err.message, 'error'); }
+    }
+
+    async function deleteAnnouncement(id, title) {
+      showModal('删除公告', '确定删除公告「' + title + '」吗？', async () => {
+        try {
+          await annApi('/admin/' + id, { method: 'DELETE' });
+          toast('公告已删除', 'success');
+          await loadAdminData();
+          render();
+        } catch (err) { toast(err.message, 'error'); }
+      });
     }
 
     function switchAdminTab(tab) {
@@ -1971,10 +2245,30 @@ function renderPage({
       return h;
     }
 
+    // ==================== Announcements (公告) ====================
+    async function loadAnnouncements() {
+      const container = document.getElementById('announcements');
+      if (!container) return;
+      try {
+        const data = await annApi('');
+        const list = data.announcements || [];
+        if (list.length === 0) { container.innerHTML = ''; return; }
+        container.innerHTML = list.map(function (a) {
+          const date = (a.created_at || '').slice(0, 10);
+          return '<div class="announcement-card fade-in">' +
+            '<div class="announcement-title">📢 ' + escapeHtml(a.title) + '<span class="announcement-date">' + date + '</span></div>' +
+            '<div class="announcement-content">' + escapeHtml(a.content) + '</div></div>';
+        }).join('');
+      } catch (err) {
+        console.error('Failed to load announcements:', err);
+      }
+    }
+
     // ==================== Init ====================
     async function init() {
       setTheme(getTheme());
       renderHeaderUser();
+      loadAnnouncements();
 
       if (state.user) {
         state.currentView = 'dashboard';
@@ -2010,12 +2304,23 @@ function renderPage({
 
   <footer class="footer">
     <div class="container">
+      ${friendLinks && friendLinks.length > 0 ? `
+      <div class="footer-friendlinks">
+        <span class="friend-link-label">✨ 友情链接：</span>
+        ${friendLinks.map((l) => `<a class="friend-link" href="${l.url}" target="_blank" rel="noopener">${l.name}</a>`).join('')}
+      </div>` : ''}
       <p>Powered by Cloudflare Workers & D1 · SubDomain Hub</p>
       <p style="margin-top:8px;font-size:12px;color:var(--text-muted);">
         感谢 <a href="https://github.com/Little100/cloudflare_subdomain_provisioning" target="_blank" rel="noopener">Little100/cloudflare_subdomain_provisioning</a> 开源项目
-        &nbsp;|&nbsp;
-        萌备 by <a href="https://github.com/moe-backup" target="_blank" rel="noopener">萌备</a>
       </p>
+      ${adminContactEmail ? `
+      <p style="margin-top:12px;">
+        <a href="mailto:${adminContactEmail}" class="btn btn-primary btn-sm btn-jelly contact-admin-btn" target="_blank">
+          ✉️ 联系管理员
+        </a>
+      </p>` : ''}
+      ${beian ? `
+      <p style="margin-top:10px;font-size:12px;color:var(--text-muted);">备案信息：${beian}</p>` : ''}
     </div>
   </footer>
 </body>

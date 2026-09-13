@@ -6,8 +6,8 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "db:migrate:local": "wrangler d1 execute subdomain-db --local --file=./migrations/0001_init.sql && wrangler d1 execute subdomain-db --local --file=./migrations/0002_add_review.sql && wrangler d1 execute subdomain-db --local --file=./migrations/0003_multi_account_encryption.sql",
-    "db:migrate:remote": "wrangler d1 execute subdomain-db --remote --file=./migrations/0001_init.sql && wrangler d1 execute subdomain-db --remote --file=./migrations/0002_add_review.sql && wrangler d1 execute subdomain-db --remote --file=./migrations/0003_multi_account_encryption.sql"
+    "db:migrate:local": "wrangler d1 execute cf --local --file=./migrations/0001_init.sql && wrangler d1 execute cf --local --file=./migrations/0003_multi_account_encryption.sql && wrangler d1 execute cf --local --file=./migrations/0004_email_verify_announcements.sql",
+    "db:migrate:remote": "wrangler d1 execute cf --remote --file=./migrations/0001_init.sql && wrangler d1 execute cf --remote --file=./migrations/0003_multi_account_encryption.sql && wrangler d1 execute cf --remote --file=./migrations/0004_email_verify_announcements.sql"
   },
   "dependencies": {
     "hono": "^4.6.0"

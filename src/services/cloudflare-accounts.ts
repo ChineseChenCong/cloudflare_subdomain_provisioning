@@ -15,6 +15,7 @@ const CF_API_BASE = 'https://api.cloudflare.com/client/v4';
  */
 export async function getUserAccounts(
   db: D1Database,
+  env: { ENCRYPTION_KEY?: string },
   userId: number
 ): Promise<(CloudflareAccount & { api_token_decrypted?: string })[]> {
   const result = await db
@@ -25,7 +26,7 @@ export async function getUserAccounts(
   const accounts: (CloudflareAccount & { api_token_decrypted?: string })[] = [];
 
   for (const account of result.results) {
-    const decrypted = await decryptToken(db, account);
+    const decrypted = await decryptToken(env, account);
     accounts.push({
       ...account,
       api_token_decrypted: decrypted || '',
@@ -40,6 +41,7 @@ export async function getUserAccounts(
  */
 export async function getDefaultAccount(
   db: D1Database,
+  env: { ENCRYPTION_KEY?: string },
   userId: number
 ): Promise<(CloudflareAccount & { api_token: string }) | null> {
   const result = await db
@@ -49,7 +51,7 @@ export async function getDefaultAccount(
 
   if (!result) return null;
 
-  const decrypted = await decryptToken(db, result);
+  const decrypted = await decryptToken(env, result);
   if (!decrypted) return null;
 
   return { ...result, api_token: decrypted };
@@ -60,6 +62,7 @@ export async function getDefaultAccount(
  */
 export async function getActiveAccounts(
   db: D1Database,
+  env: { ENCRYPTION_KEY?: string },
   userId: number
 ): Promise<{ account: CloudflareAccount; token: string }[]> {
   const result = await db
@@ -70,7 +73,7 @@ export async function getActiveAccounts(
   const accounts: { account: CloudflareAccount; token: string }[] = [];
 
   for (const account of result.results) {
-    const decrypted = await decryptToken(db, account);
+    const decrypted = await decryptToken(env, account);
     if (decrypted) {
       accounts.push({ account, token: decrypted });
     }
@@ -286,7 +289,7 @@ export async function getAccountById(
  * 解密账户 API Token
  */
 export async function decryptToken(
-  db: D1Database,
+  env: { ENCRYPTION_KEY?: string },
   account: CloudflareAccount
 ): Promise<string | null> {
   // 先检查是否已经是明文（兼容旧数据）
@@ -294,7 +297,7 @@ export async function decryptToken(
     return account.api_token;
   }
 
-  return decryptText(db, account.api_token);
+  return decryptText(env, account.api_token);
 }
 
 /**

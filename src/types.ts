@@ -14,6 +14,12 @@ export interface Env {
   SITE_BACKGROUND_IMAGE?: string;
   SITE_BACKGROUND_OVERLAY?: string;
   SITE_LOGO?: string;
+  // 备案信息（可选，如 "浙ICP备12345678号" 或虚拟备案项目；未配置则不显示）
+  SITE_BEIAN?: string;
+  // 友情链接（可选，JSON 数组字符串：[{"name":"xx","url":"https://..."}]）
+  FRIEND_LINKS?: string;
+  // 联系管理员邮箱（可选，用于 footer "联系管理员" 按钮）
+  ADMIN_CONTACT_EMAIL?: string;
   // SMTP 邮件通知（可选）
   SMTP_HOST?: string;
   SMTP_PORT?: string;
@@ -27,6 +33,22 @@ export interface Env {
   EMAIL_VERIFICATION_REQUIRED?: string;
   // 允许的邮箱域名白名单（逗号分隔，空=不限制）
   ALLOWED_EMAIL_DOMAINS?: string;
+}
+
+export interface Announcement {
+  id: number;
+  title: string;
+  content: string;
+  is_active: number;
+  created_by: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FriendLink {
+  name: string;
+  url: string;
+  description?: string;
 }
 
 export interface User {

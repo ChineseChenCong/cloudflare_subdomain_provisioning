@@ -1,4 +1,4 @@
-import type { Env, DomainConfig } from './types';
+import type { Env, DomainConfig, FriendLink } from './types';
 
 // Zone ID 缓存（Worker 实例生命周期内有效）
 const zoneIdCache = new Map<string, string>();
@@ -178,4 +178,34 @@ export function getSiteLogo(env: Env): string | null {
  */
 export function getSiteName(env: Env): string {
   return env.SITE_NAME || 'SubDomain Hub';
+}
+
+/**
+ * 获取备案信息（未配置则不显示）
+ */
+export function getSiteBeian(env: Env): string {
+  return env.SITE_BEIAN || '';
+}
+
+/**
+ * 获取友情链接列表
+ */
+export function getFriendLinks(env: Env): FriendLink[] {
+  if (!env.FRIEND_LINKS) return [];
+  try {
+    const parsed = JSON.parse(env.FRIEND_LINKS);
+    if (Array.isArray(parsed)) {
+      return parsed.filter((l) => l && l.name && l.url);
+    }
+    return [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * 获取管理员联系邮箱（未配置则不显示联系按钮）
+ */
+export function getAdminContactEmail(env: Env): string {
+  return env.ADMIN_CONTACT_EMAIL || '';
 }

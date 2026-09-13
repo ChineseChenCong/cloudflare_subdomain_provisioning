@@ -7,6 +7,7 @@ import pageRoutes from './routes/pages';
 import accountRoutes from './routes/accounts';
 import verificationRoutes from './routes/verification';
 import proxiedRoutes from './routes/proxied';
+import announcementRoutes from './routes/announcements';
 
 type Variables = { user: User };
 
@@ -28,6 +29,7 @@ app.route('/api', apiRoutes);
 app.route('/api/accounts', accountRoutes);
 app.route('/api/verification', verificationRoutes);
 app.route('/api/proxied', proxiedRoutes);
+app.route('/announcements', announcementRoutes);
 app.route('/', pageRoutes);
 
 // 404

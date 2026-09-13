@@ -10,7 +10,7 @@ import {
   verifyEmailByToken,
   resendVerificationEmail,
 } from '../services/email-verification';
-import { sendEmail, buildVerificationEmail } from '../services/email';
+import { sendEmail } from '../services/email';
 
 type Variables = { user: User };
 

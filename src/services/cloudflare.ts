@@ -8,7 +8,7 @@ interface CfApiResponse<T = unknown> {
   result: T;
 }
 
-interface CfDnsRecord {
+export interface CfDnsRecord {
   id: string;
   type: string;
   name: string;
@@ -29,11 +29,11 @@ function headers(apiToken: string): Record<string, string> {
 export async function createDnsRecord(
   apiToken: string,
   zoneId: string,
-  record: DnsRecordInput & { fullName: string }
+  record: DnsRecordInput & { fullName?: string }
 ): Promise<CfDnsRecord> {
   const body: Record<string, unknown> = {
     type: record.type,
-    name: record.fullName,
+    name: record.fullName || record.name,
     content: record.content,
     ttl: record.ttl || 1,
     proxied: record.proxied ?? false,
@@ -63,11 +63,11 @@ export async function updateDnsRecord(
   apiToken: string,
   zoneId: string,
   recordId: string,
-  record: DnsRecordInput & { fullName: string }
+  record: DnsRecordInput & { fullName?: string }
 ): Promise<CfDnsRecord> {
   const body: Record<string, unknown> = {
     type: record.type,
-    name: record.fullName,
+    name: record.fullName || record.name,
     content: record.content,
     ttl: record.ttl || 1,
     proxied: record.proxied ?? false,

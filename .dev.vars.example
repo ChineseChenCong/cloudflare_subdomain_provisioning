@@ -46,3 +46,27 @@ SMTP_USER=your_smtp_user
 SMTP_PASS=your_smtp_password
 SMTP_FROM=noreply@example.com
 SMTP_FROM_NAME=SubDomain Hub
+
+# ========== 站点外观定制（可选） ==========
+
+# 背景图片 URL
+SITE_BACKGROUND_IMAGE=
+
+# 背景遮罩颜色（默认 rgba(15, 23, 42, 0.7)，不配置则用默认深色遮罩）
+SITE_BACKGROUND_OVERLAY=rgba(15, 23, 42, 0.7)
+
+# 站点 Logo URL（不配置则使用内置默认萌系 Logo）
+SITE_LOGO=
+
+# ========== 友情链接 & 联系管理员（可选） ==========
+
+# 友情链接（JSON 数组，不配置则不显示）
+# FRIEND_LINKS=[{"name":"我的博客","url":"https://blog.example.com"},{"name":"朋友站点","url":"https://friend.example.com"}]
+
+# 联系管理员邮箱（配置后底部显示"联系管理员"按钮，点击发邮件）
+ADMIN_CONTACT_EMAIL=admin@example.com
+
+# ========== 备案信息（可选，虚拟备案项目） ==========
+
+# 网站底部备案信息（配置则显示，不配置则不显示）
+# SITE_BEIAN=浙ICP备12345678号-1
