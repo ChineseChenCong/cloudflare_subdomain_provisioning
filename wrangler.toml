@@ -1,4 +1,4 @@
-name = "subdomain-provisioning"
+name = "cloudflare-subdomain-provisioning"
 main = "src/index.ts"
 compatibility_date = "2024-12-01"
 
