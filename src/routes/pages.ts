@@ -76,9 +76,12 @@ function renderPage({
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${siteName}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@400;500;600;700&amp;family=ZCOOL+KuaiLe&amp;display=swap" rel="stylesheet">
   <style>
     :root {
-      --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+      --font-sans: 'Baloo 2', 'ZCOOL KuaiLe', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'YouYuan', '幼圆', 'Comic Sans MS', sans-serif;
       --font-mono: 'SF Mono', 'Fira Code', 'Fira Mono', 'Roboto Mono', monospace;
       --radius: 16px;
       --radius-sm: 10px;
@@ -146,7 +149,7 @@ function renderPage({
       --shadow: 0 8px 26px rgba(29, 78, 138, 0.10);
       --shadow-sm: 0 4px 12px rgba(29, 78, 138, 0.06);
       --glass-bg: rgba(255, 255, 255, 0.80);
-      --overlay-fallback: rgba(244, 250, 255, 0.55);
+      --overlay-fallback: rgba(230, 243, 255, 0.70);
     }
 
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -530,6 +533,19 @@ function renderPage({
       border-color: var(--accent-hover);
     }
     .form-input::placeholder { color: var(--text-muted); }
+    .form-select {
+      appearance: none;
+      -webkit-appearance: none;
+      cursor: pointer;
+      padding-right: 38px;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%233b82f6' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+      background-size: 14px;
+      position: relative;
+    }
+    .form-select:hover { border-color: var(--accent-hover); }
+    .form-select option { background: var(--bg-card); color: var(--text-primary); padding: 6px 10px; }
     .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
     .form-row-3 { display: grid; grid-template-columns: 140px 1fr 1fr; gap: 12px; }
     .form-inline { display: flex; align-items: flex-end; gap: 8px; }
@@ -1302,6 +1318,45 @@ function renderPage({
     .verify-banner .btn:hover {
       background: rgba(255, 255, 255, 0.3);
     }
+    .verify-banner-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      width: 100%;
+      flex-wrap: wrap;
+    }
+    .verify-binder {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .verify-binder .form-input {
+      max-width: 300px;
+      padding: 9px 14px;
+      border-radius: var(--radius-sm);
+      background: rgba(255, 255, 255, 0.95);
+      color: #1f2937;
+      border-color: rgba(255, 255, 255, 0.4);
+      font-family: var(--font-mono);
+    }
+    .verify-binder .form-input:focus {
+      border-color: #fff;
+      box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.25);
+      transform: none;
+    }
+    .verify-banner-row .btn-primary {
+      background: #fff;
+      color: #2563eb;
+      border-color: rgba(255, 255, 255, 0.5);
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15);
+    }
+    .verify-banner-row .btn-primary:hover {
+      background: #f0f4ff;
+      color: #1d4ed8;
+      transform: translateY(-2px);
+    }
 
     /* 多账户管理卡片 */
     .account-card {
@@ -1645,8 +1700,16 @@ function renderPage({
       // 邮箱验证提示
       if (state.showVerifyBanner) {
         h += '<div class="verify-banner bounce-in">' +
-          '<p>📧 请验证您的邮箱以使用全部功能</p>' +
-          '<button class="btn btn-sm" onclick="sendVerificationEmail()">发送验证邮件</button>' +
+          '<div class="verify-banner-row">' +
+          (state.user.email
+            ? '<p>📧 请验证您的邮箱 <b>' + escapeHtml(state.user.email) + '</b> 以使用全部功能</p>' +
+              '<button class="btn btn-sm" onclick="sendVerificationEmail()">发送验证邮件</button>'
+            : '<p>📧 您还没有绑定邮箱，请先绑定邮箱后即可申请子域名</p>' +
+              '<div class="verify-binder">' +
+              '<input type="email" class="form-input" id="bind-email" placeholder="name@' + ((state.allowedEmailDomains && state.allowedEmailDomains[0]) || 'example.com').replace(/\*/g, '') + '" onkeydown="if(event.key===\'Enter\'){bindEmail();}" />' +
+              '<button class="btn btn-primary btn-sm btn-jelly" onclick="bindEmail()">绑定并发送验证邮件</button>' +
+              '</div>') +
+          '</div>' +
           '</div>';
       }
 
@@ -1924,6 +1987,7 @@ function renderPage({
         '<button class="tab'+(state.adminTab==='all'?' active':'')+'" onclick="switchAdminTab(\\'all\\')">所有子域名</button>' +
         '<button class="tab'+(state.adminTab==='users'?' active':'')+'" onclick="switchAdminTab(\\'users\\')">用户管理</button>' +
         '<button class="tab'+(state.adminTab==='announcements'?' active':'')+'" onclick="switchAdminTab(\\'announcements\\')">公告管理</button>' +
+        '<button class="tab'+(state.adminTab==='accounts'?' active':'')+'" onclick="switchAdminTab(\\'accounts\\')">' + icons.key + ' Cloudflare 账户</button>' +
         '</div>';
 
       if (state.adminTab === 'pending') {
@@ -1932,6 +1996,8 @@ function renderPage({
         h += renderAdminAll();
       } else if (state.adminTab === 'announcements') {
         h += renderAdminAnnouncements();
+      } else if (state.adminTab === 'accounts') {
+        h += renderAccountsContent();
       } else {
         h += renderAdminUsers();
       }
@@ -2098,8 +2164,11 @@ function renderPage({
       });
     }
 
-    function switchAdminTab(tab) {
+    async function switchAdminTab(tab) {
       state.adminTab = tab;
+      if (tab === 'accounts') {
+        try { await loadAccounts(); } catch (e) { console.error('Failed to load accounts:', e); }
+      }
       render();
     }
 
@@ -2151,6 +2220,21 @@ function renderPage({
     }
 
     // ==================== Email Verification ====================
+    async function bindEmail() {
+      const input = document.getElementById('bind-email');
+      const email = input?.value?.trim().toLowerCase();
+      if (!email) { toast('请输入邮箱地址', 'error'); return; }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) { toast('邮箱格式不正确', 'error'); return; }
+      try {
+        const res = await api('/verification/bind', { method: 'POST', body: JSON.stringify({ email }) });
+        state.user.email = email;
+        state.user.email_verified = false;
+        state.showVerifyBanner = true;
+        toast(res.message || '邮箱已绑定，验证邮件已发送', 'success');
+        render();
+      } catch (err) { toast(err.message, 'error'); }
+    }
+
     async function sendVerificationEmail() {
       try {
         await api('/verification/send', { method: 'POST' });
@@ -2282,7 +2366,12 @@ function renderPage({
       let h = '<div class="dashboard fade-in">' +
         '<a href="#" class="back-link" onclick="navigate(\\'dashboard\\'); return false;">← 返回面板</a>' +
         '<div class="section-header" style="margin-top:16px"><h2 class="section-title" style="display:flex;align-items:center;gap:8px">' + icons.key + ' Cloudflare 账户管理</h2></div>' +
-        '<div class="section">' +
+        renderAccountsContent() + '</div>';
+      return h;
+    }
+
+    function renderAccountsContent() {
+      let h = '<div class="section">' +
         '<div class="card" style="border-left:4px solid var(--accent)">' +
         '<div class="card-title">多账户配置说明</div>' +
         '<p style="color:var(--text-secondary);line-height:1.7;margin-top:8px">本系统支持<strong>多 Cloudflare 账户</strong>：不同域名可绑定不同账户的 Zone。请为每个账户单独创建 API Token，并填写到下方表单。Token 仅用于 DNS 操作，需要 <strong>Zone - Edit</strong> 权限；请勿使用 Global 权限过大的 Token。</p>' +
@@ -2303,7 +2392,7 @@ function renderPage({
         '<button class="btn btn-primary btn-jelly" onclick="createAccount()">添加账户</button>' +
         '</div></div>' +
         '<div class="section"><h3 class="section-title" style="font-size:18px;margin-bottom:16px">我的账户</h3>' +
-        renderAccounts() + '</div></div>';
+        renderAccounts() + '</div>';
       return h;
     }
 
@@ -2371,7 +2460,7 @@ function renderPage({
         <span class="friend-link-label">✨ 友情链接：</span>
         ${friendLinks.map((l) => `<a class="friend-link" href="${l.url}" target="_blank" rel="noopener">${l.name}</a>`).join('')}
       </div>` : '')}
-      <p>Powered by Cloudflare Workers & D1 · SubDomain Hub</p>
+      <p>Powered by Cloudflare Workers &amp; D1 · ${siteName}</p>
       <p style="margin-top:8px;font-size:12px;color:var(--text-muted);">
         感谢 <a href="https://github.com/Little100/cloudflare_subdomain_provisioning" target="_blank" rel="noopener">Little100/cloudflare_subdomain_provisioning</a> 开源项目
       </p>

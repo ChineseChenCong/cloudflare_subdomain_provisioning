@@ -11,6 +11,7 @@ import {
   resendVerificationEmail,
 } from '../services/email-verification';
 import { sendEmail } from '../services/email';
+import { updateUserEmail } from '../db/queries';
 
 type Variables = { user: User };
 
@@ -72,6 +73,45 @@ verification.post('/send', authMiddleware, async (c) => {
     return c.json({ message: '验证邮件已发送，请查收' });
   } catch (err: any) {
     return c.json({ error: err.message || '发送验证邮件失败' }, 500);
+  }
+});
+
+// 绑定邮箱（当用户没有邮箱或想更换邮箱时）
+verification.post('/bind', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const env = c.env;
+
+  let email = '';
+  try {
+    email = (await c.req.json<{ email: string }>()).email?.trim().toLowerCase() || '';
+  } catch {
+    return c.json({ error: '请提供邮箱地址' }, 400);
+  }
+
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
+    return c.json({ error: '邮箱格式不正确' }, 400);
+  }
+
+  const allowed = isEmailDomainAllowed(env, email);
+  if (!allowed) {
+    return c.json({ error: '该邮箱域名不在允许列表中' }, 400);
+  }
+
+  try {
+    await updateUserEmail(c.env.DB, user.id, email);
+
+    const token = crypto.randomUUID().replace(/-/g, '');
+    await createEmailVerification(c.env.DB, user.id, email);
+
+    const siteName = env.SITE_NAME || 'SubDomain Hub';
+    const url = new URL(c.req.url);
+    const siteUrl = url.origin;
+
+    await resendVerificationEmail(env, c.env.DB, user.id, email, siteName, siteUrl);
+
+    return c.json({ message: '邮箱已绑定，验证邮件已发送，请查收', email });
+  } catch (err: any) {
+    return c.json({ error: err.message || '绑定邮箱失败' }, 500);
   }
 });
 

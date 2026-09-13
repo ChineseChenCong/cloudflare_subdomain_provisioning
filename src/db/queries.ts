@@ -65,6 +65,19 @@ export async function updateUserEmailVerified(
     .run();
 }
 
+export async function updateUserEmail(
+  db: D1Database,
+  userId: number,
+  email: string
+): Promise<void> {
+  await db
+    .prepare(
+      `UPDATE users SET email = ?, email_verified = 0, updated_at = datetime('now') WHERE id = ?`
+    )
+    .bind(email, userId)
+    .run();
+}
+
 // ==================== Subdomains ====================
 
 export async function getUserSubdomains(db: D1Database, userId: number): Promise<Subdomain[]> {

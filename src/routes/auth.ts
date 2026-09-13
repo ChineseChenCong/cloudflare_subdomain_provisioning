@@ -120,12 +120,12 @@ auth.get('/github/callback', async (c) => {
     return c.redirect('/');
   } catch (err: any) {
     console.error('OAuth callback error:', err);
-    // 返回具体错误方便排查（多为 JWT_SECRET 未配置 / GITHUB_CLIENT_SECRET 错误 / 回调地址不匹配）
     const msg = err?.message || '未知错误';
+    // 如果上游返回了 HTML（常见于 client_secret 错误 / redirect_uri 不匹配），把状态码和内容类型一并暴露
     const detail = /(key|JWT_SECRET|signature|importKey)/i.test(msg)
       ? '服务器 JWT_SECRET 未正确配置'
       : msg;
-    return c.json({ error: `登录失败：${detail}` }, 500);
+    return c.json({ error: `登录失败：${detail}`, hint: '检查 GitHub OAuth App 的 Authorization callback URL 是否精确匹配当前域名' }, 500);
   }
 });
 

@@ -8,28 +8,30 @@ database_name = "cf"
 database_id = "c888cdd9-b2f8-4501-92ab-5d3872406f1e"
 
 [vars]
+# ⚠️ 注意：以下所有变量均已（或建议）在 Cloudflare Dashboard → Worker → 设置 → 变量中直接配置。
+# 为避免 wrangler deploy 用本地的值覆盖后台配置，这里全部注释掉，部署时仅上传代码、不触碰这些变量。
+# 本地开发调试请使用 .dev.vars 提供这些变量，不要在这里启用。
+
 # 可用域名配置，多个用逗号分隔（Zone ID 将自动通过 CF API 解析）
-# DOMAINS = "example.com,example.org"
+# DOMAINS = "rol.moe,mail.rol.moe,kivotos.edu.kg,mail.kivotos.edu.kg"
 
-# 禁止使用的子域名前缀，逗号分隔
-BANNED_PREFIXES = "www,ns1,ns2,ns,mc,mail,smtp,pop,pop3,imap,ftp,admin,api,cdn,dev,staging,test,beta,alpha,demo,status,blog,shop,store,app,dashboard,panel,portal,secure,vpn,proxy,relay,mx,mx1,mx2,autoconfig,autodiscover,_dmarc,_domainkey,cpanel,webmail,webdisk,cpcalendars,cpcontacts,ww,ww1,ww2,ww3"
+# 禁止使用的子域名前缀，逗号分隔（已在 CF 后台配置为变量/密钥）
+# BANNED_PREFIXES = "www,ns1,ns2,ns,mc,mail,smtp,pop,pop3,imap,ftp,admin,api,cdn,dev,staging,test,beta,alpha,demo,status,blog,shop,store,app,dashboard,panel,portal,secure,vpn,proxy,relay,mx,mx1,mx2,autoconfig,autodiscover,_dmarc,_domainkey,cpanel,webmail,webdisk,cpcalendars,cpcontacts,ww,ww1,ww2,ww3,dns,dash,gov,edu,ac"
 
-# 每个用户最多可注册的子域名数量
-MAX_SUBDOMAINS_PER_USER = "1"
+# 每个用户最多可注册的子域名数量（已在 CF 后台配置，勿覆盖 → 5）
+# MAX_SUBDOMAINS_PER_USER = "5"
 
-# 每个子域名下最多 DNS 记录数
-MAX_RECORDS_PER_SUBDOMAIN = "20"
+# 每个子域名下最多 DNS 记录数（已在 CF 后台配置 2000）
+# MAX_RECORDS_PER_SUBDOMAIN = "2000"
 
-# 站点名称
-SITE_NAME = "SubDomain Hub"
+# 站点名称（已在 CF 后台配置为 R.O.L. Domain System）
+# SITE_NAME = "R.O.L. Domain System"
 
-# ========== 新增配置 ==========
+# 是否要求邮箱验证（已在 CF 后台配置 true）
+# EMAIL_VERIFICATION_REQUIRED = "true"
 
-# 是否要求邮箱验证
-EMAIL_VERIFICATION_REQUIRED = "true"
-
-# 允许的邮箱域名白名单（逗号分隔，空=不限制）
-ALLOWED_EMAIL_DOMAINS = "gmail.com,outlook.com,qq.com,163.com,126.com,foxmail.com,icloud.com"
+# 允许的邮箱域名白名单（已在 CF 后台配置 rol.moe 等）
+# ALLOWED_EMAIL_DOMAINS = "rol.moe,mail.rol.moe,kivotos.edu.kg,mail.kivotos.edu.kg"
 
 # ========== 站点外观（可选） ==========
 # SITE_BACKGROUND_IMAGE = "https://..."

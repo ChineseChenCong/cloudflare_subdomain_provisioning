@@ -161,9 +161,10 @@ export function getBackgroundImage(env: Env): string | null {
 
 /**
  * 获取背景图遮罩颜色（hex 或 rgba）
+ * 未显式配置时返回空字符串，由 CSS 侧使用主题感知的 --overlay-fallback（深色/浅色主题各自适配）
  */
 export function getBackgroundOverlay(env: Env): string {
-  return env.SITE_BACKGROUND_OVERLAY || 'rgba(15, 23, 42, 0.7)';
+  return env.SITE_BACKGROUND_OVERLAY || '';
 }
 
 /**
