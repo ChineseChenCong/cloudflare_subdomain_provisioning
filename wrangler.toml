@@ -4,8 +4,8 @@ compatibility_date = "2024-12-01"
 
 [[d1_databases]]
 binding = "DB"
-database_name = "subdomain-db"
-database_id = "YOUR_D1_DATABASE_ID"
+database_name = "cf"
+database_id = "c888cdd9-b2f8-4501-92ab-5d3872406f1e"
 
 [vars]
 # 可用域名配置，多个用逗号分隔（Zone ID 将自动通过 CF API 解析）
