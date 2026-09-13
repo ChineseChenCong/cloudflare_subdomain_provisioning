@@ -2417,36 +2417,47 @@ function renderPage({
 
     // ==================== Init ====================
     async function init() {
-      setTheme(getTheme());
-      renderHeaderUser();
-      loadAnnouncements();
+      // 所有数据加载均单独兜底，一旦某接口失败不能让整段 init 中断，
+      // 否则 render() 不执行，页面会一直停在加载转圈（顶/底由服务端渲染、不受影响，正是 “中间转圈” 的现象）。
+      try {
+        setTheme(getTheme());
+        renderHeaderUser();
+        try { loadAnnouncements(); }
+        catch (err) { console.error('Failed to load announcements:', err); }
 
-      if (state.user) {
-        state.currentView = 'dashboard';
-        await loadDashboardData();
+        if (state.user) {
+          state.currentView = 'dashboard';
+          try { await loadDashboardData(); }
+          catch (err) { console.error('Failed to load dashboard data:', err); }
 
-        // 加载邮箱验证配置
-        try {
-          const config = await api('/verification/config');
-          state.emailVerificationRequired = config.required;
-          state.allowedEmailDomains = config.allowed_domains || [];
+          // 加载邮箱验证配置
+          try {
+            const config = await api('/verification/config');
+            state.emailVerificationRequired = config.required;
+            state.allowedEmailDomains = config.allowed_domains || [];
 
-          // 检查是否需要显示验证提示
-          if (state.emailVerificationRequired && !state.user.email_verified) {
-            state.showVerifyBanner = true;
+            // 检查是否需要显示验证提示
+            if (state.emailVerificationRequired && !state.user.email_verified) {
+              state.showVerifyBanner = true;
+            }
+          } catch (err) {
+            console.error('Failed to load verification config:', err);
           }
-        } catch (err) {
-          console.error('Failed to load verification config:', err);
-        }
 
-        // 加载账户列表
-        await loadAccounts();
+          // 加载账户列表
+          try { await loadAccounts(); }
+          catch (err) { console.error('Failed to load accounts:', err); }
 
-        if (state.user.is_admin) {
-          loadAdminData();
+          if (state.user.is_admin) {
+            try { loadAdminData(); }
+            catch (err) { console.error('Failed to load admin data:', err); }
+          }
         }
+      } catch (err) {
+        console.error('init error:', err);
       }
 
+      // 无论上面数据是否成功加载，都必须渲染，避免停留在加载转圈
       render();
     }
 
