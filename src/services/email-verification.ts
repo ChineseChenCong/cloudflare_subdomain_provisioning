@@ -91,7 +91,7 @@ export async function createEmailVerification(
 /**
  * 验证邮箱
  */
-export async function verifyEmail(
+export async function verifyEmailByToken(
   db: D1Database,
   token: string
 ): Promise<{ success: boolean; user_id: number; email: string } | null> {
