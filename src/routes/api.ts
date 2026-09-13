@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import type { Context } from 'hono';
 import type { Env, User, DnsRecordInput } from '../types';
 import { ALLOWED_RECORD_TYPES as RECORD_TYPES } from '../types';
 import { authMiddleware, emailVerifiedMiddleware, adminMiddleware } from '../middleware/auth';
@@ -36,6 +37,10 @@ import {
   deleteDnsRecord as cfDeleteDnsRecord,
 } from '../services/cloudflare';
 import {
+  getActiveAccounts,
+  resolveZoneIdAndTokenFromAccounts,
+} from '../services/cloudflare-accounts';
+import {
   sendEmail,
   buildApprovalEmail,
   buildRejectionEmail,
@@ -48,6 +53,23 @@ const api = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 // 所有 API 路由需要认证
 api.use('/*', authMiddleware, emailVerifiedMiddleware);
+
+// 从用户绑定的多账户解析目标域名的 Zone ID 与对应 token（多账户支持）
+async function resolveCfAccount(
+  c: Context<{ Bindings: Env; Variables: Variables }>,
+  domain: string
+): Promise<{ zoneId: string; token: string; error?: string }> {
+  const user = c.get('user');
+  const activeAccounts = await getActiveAccounts(c.env.DB, c.env, user.id);
+  if (activeAccounts.length === 0) {
+    return { zoneId: '', token: '', error: '没有可用的 Cloudflare 账户，请先在账户管理中添加' };
+  }
+  const resolved = await resolveZoneIdAndTokenFromAccounts(activeAccounts, domain);
+  if (!resolved) {
+    return { zoneId: '', token: '', error: '域名配置错误，无法获取 Zone ID' };
+  }
+  return resolved;
+}
 
 // ==================== 用户信息 ====================
 
@@ -183,12 +205,12 @@ api.delete('/subdomains/:id', async (c) => {
 
   // 如果已审核通过，先删除所有 Cloudflare DNS 记录
   if (subdomain.status === 'approved') {
-    const zoneId = await getZoneIdForDomain(c.env, subdomain.domain);
-    if (zoneId) {
+    const acc = await resolveCfAccount(c, subdomain.domain);
+    if (!acc.error) {
       const records = await deleteAllRecordsForSubdomain(c.env.DB, subdomain.id);
       for (const record of records) {
         try {
-          await cfDeleteDnsRecord(c.env.CF_API_TOKEN, zoneId, record.cf_record_id);
+          await cfDeleteDnsRecord(acc.token, acc.zoneId, record.cf_record_id);
         } catch (err) {
           console.error(`Failed to delete CF record ${record.cf_record_id}:`, err);
         }
@@ -300,15 +322,15 @@ api.post('/subdomains/:id/records', async (c) => {
   // 构建完整名称
   const fullName = buildFullName(body.name || '@', subdomain.subdomain, subdomain.domain);
 
-  // 获取 Zone ID（自动查找）
-  const zoneId = await getZoneIdForDomain(c.env, subdomain.domain);
-  if (!zoneId) {
-    return c.json({ error: '域名配置错误，无法获取 Zone ID' }, 500);
+  // 从用户绑定的账户解析 Zone ID 与对应 token（多账户）
+  const acc = await resolveCfAccount(c, subdomain.domain);
+  if (acc.error) {
+    return c.json({ error: acc.error }, 500);
   }
 
   try {
     // 在 Cloudflare 创建 DNS 记录
-    const cfRecord = await cfCreateDnsRecord(c.env.CF_API_TOKEN, zoneId, {
+    const cfRecord = await cfCreateDnsRecord(acc.token, acc.zoneId, {
       type: body.type,
       name: body.name || '@',
       content: body.content.trim(),
@@ -374,15 +396,15 @@ api.put('/subdomains/:id/records/:recordId', async (c) => {
 
   const fullName = buildFullName(body.name || '@', subdomain.subdomain, subdomain.domain);
 
-  const zoneId = await getZoneIdForDomain(c.env, subdomain.domain);
-  if (!zoneId) {
-    return c.json({ error: '域名配置错误' }, 500);
+  const acc = await resolveCfAccount(c, subdomain.domain);
+  if (acc.error) {
+    return c.json({ error: acc.error }, 500);
   }
 
   try {
     const cfRecord = await cfUpdateDnsRecord(
-      c.env.CF_API_TOKEN,
-      zoneId,
+      acc.token,
+      acc.zoneId,
       existingRecord.cf_record_id,
       {
         type: body.type,
@@ -435,13 +457,13 @@ api.delete('/subdomains/:id/records/:recordId', async (c) => {
     return c.json({ error: 'DNS 记录不存在' }, 404);
   }
 
-  const zoneId = await getZoneIdForDomain(c.env, subdomain.domain);
-  if (!zoneId) {
-    return c.json({ error: '域名配置错误' }, 500);
+  const acc = await resolveCfAccount(c, subdomain.domain);
+  if (acc.error) {
+    return c.json({ error: acc.error }, 500);
   }
 
   try {
-    await cfDeleteDnsRecord(c.env.CF_API_TOKEN, zoneId, record.cf_record_id);
+    await cfDeleteDnsRecord(acc.token, acc.zoneId, record.cf_record_id);
   } catch (err: any) {
     console.error(`Failed to delete CF record:`, err);
   }
@@ -561,12 +583,12 @@ api.delete('/admin/subdomains/:id', adminMiddleware, async (c) => {
   }
 
   if (subdomain.status === 'approved') {
-    const zoneId = await getZoneIdForDomain(c.env, subdomain.domain);
-    if (zoneId) {
+    const acc = await resolveCfAccount(c, subdomain.domain);
+    if (!acc.error) {
       const records = await deleteAllRecordsForSubdomain(c.env.DB, subdomain.id);
       for (const record of records) {
         try {
-          await cfDeleteDnsRecord(c.env.CF_API_TOKEN, zoneId, record.cf_record_id);
+          await cfDeleteDnsRecord(acc.token, acc.zoneId, record.cf_record_id);
         } catch (err) {
           console.error(`Failed to delete CF record ${record.cf_record_id}:`, err);
         }

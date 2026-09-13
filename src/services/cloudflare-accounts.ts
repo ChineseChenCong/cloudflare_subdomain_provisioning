@@ -138,7 +138,7 @@ export async function createAccount(
       `INSERT INTO cloudflare_accounts (user_id, account_name, api_token, zone_id, is_active, is_default)
        VALUES (?, ?, ?, ?, 1, ?)`
     )
-    .bind(userId, accountName, encryptedToken, finalZoneId, isDefault ? 1 : 0)
+    .bind(userId, accountName, encryptedToken, finalZoneId ?? null, isDefault ? 1 : 0)
     .run();
 
   const id = result.meta.last_row_id;
