@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { html } from 'hono/html';
+import { html, raw } from 'hono/html';
 import type { Env, User } from '../types';
 import { optionalAuthMiddleware } from '../middleware/auth';
 import {
@@ -1350,7 +1350,7 @@ function renderPage({
     .section-header { animation: fadeIn 0.5s ease; }
   </style>
   
-  ${backgroundImage ? `<div class="bg-image-wrapper"><img class="bg-image" src="${backgroundImage}" alt="background" /><div class="bg-overlay"></div></div>` : ''}
+  ${raw(backgroundImage ? `<div class="bg-image-wrapper"><img class="bg-image" src="${backgroundImage}" alt="background" /><div class="bg-overlay"></div></div>` : '')}
 </head>
 <body>
   <!-- 可爱的漂浮装饰气泡 -->
@@ -1361,7 +1361,7 @@ function renderPage({
   <header class="header">
     <div class="container">
       <a href="/" class="logo" onclick="navigate('home'); return false;">
-        ${siteLogo ? `<img src="${siteLogo}" alt="logo" class="logo-icon" style="width:36px;height:36px;object-fit:contain;background:none;box-shadow:none;border-radius:12px;" />` : `<div class="logo-icon">${defaultLogoSvg}</div>`}
+        ${raw(siteLogo ? `<img src="${siteLogo}" alt="logo" class="logo-icon" style="width:36px;height:36px;object-fit:contain;background:none;box-shadow:none;border-radius:12px;" />` : `<div class="logo-icon">${defaultLogoSvg}</div>`)}
         <span>${siteName}</span>
       </a>
       <div class="header-actions">
@@ -1418,7 +1418,7 @@ function renderPage({
     };
 
     const state = {
-      user: ${user ? `JSON.parse('${JSON.stringify({ id: user.id, github_username: user.github_username, avatar_url: user.avatar_url, is_admin: !!user.is_admin, email: user.email, email_verified: user.email_verified })}')` : 'null'},
+      user: ${raw(user ? `JSON.parse('${JSON.stringify({ id: user.id, github_username: user.github_username, avatar_url: user.avatar_url, is_admin: !!user.is_admin, email: user.email, email_verified: user.email_verified })}')` : 'null')},
       domains: [],
       subdomains: [],
       records: [],
@@ -2304,23 +2304,23 @@ function renderPage({
 
   <footer class="footer">
     <div class="container">
-      ${friendLinks && friendLinks.length > 0 ? `
+      ${raw(friendLinks && friendLinks.length > 0 ? `
       <div class="footer-friendlinks">
         <span class="friend-link-label">✨ 友情链接：</span>
         ${friendLinks.map((l) => `<a class="friend-link" href="${l.url}" target="_blank" rel="noopener">${l.name}</a>`).join('')}
-      </div>` : ''}
+      </div>` : '')}
       <p>Powered by Cloudflare Workers & D1 · SubDomain Hub</p>
       <p style="margin-top:8px;font-size:12px;color:var(--text-muted);">
         感谢 <a href="https://github.com/Little100/cloudflare_subdomain_provisioning" target="_blank" rel="noopener">Little100/cloudflare_subdomain_provisioning</a> 开源项目
       </p>
-      ${adminContactEmail ? `
+      ${raw(adminContactEmail ? `
       <p style="margin-top:12px;">
         <a href="mailto:${adminContactEmail}" class="btn btn-primary btn-sm btn-jelly contact-admin-btn" target="_blank">
           ✉️ 联系管理员
         </a>
-      </p>` : ''}
-      ${beian ? `
-      <p style="margin-top:10px;font-size:12px;color:var(--text-muted);">备案信息：${beian}</p>` : ''}
+      </p>` : '')}
+      ${raw(beian ? `
+      <p style="margin-top:10px;font-size:12px;color:var(--text-muted);">备案信息：${beian}</p>` : '')}
     </div>
   </footer>
 </body>
