@@ -8,28 +8,30 @@ database_name = "cf"
 database_id = "c888cdd9-b2f8-4501-92ab-5d3872406f1e"
 
 [vars]
-# ⚠️ 安全说明：以下所有变量均已在（或应在）Cloudflare Dashboard → Worker → 设置 → 变量中直接配置，
-# 具体取值（域名、Token、BANNED_PREFIXES 等）只保存在 CF 后台，不得写入本文件（本文件被 git 跟踪）。
-# 本地开发调试请把这些变量写入 .dev.vars（已被 .gitignore 忽略，不会进 GitHub）。
+# ⚠️ 部署策略（幂等）：以下均为非机密普通变量，正式写入本文件。
+# wrangler deploy 会把这些值设为 Worker 线上的同名普通变量 → 部署确定性，
+# 这些变量永不“消失”（git 有持久定义，换人换机不丢）。若要改值，直接改本文件再部署即可。
+# ⚠️ 加密 Secret（CF_API_TOKEN / RESEND_API_KEY / GITHUB_CLIENT_ID / GITHUB_CLIENT_SECRET /
+# JWT_SECRET / ENCRYPTION_KEY / SMTP_PASS / ADMIN_USERS）绝不写入本文件（本文件被 git 跟踪），
+# 只配置在 Cloudflare Dashboard → Worker → 设置 → 变量（加密），且只存加密。
+# 本地调试请用 .dev.vars（已被 .gitignore 忽略，不会进 GitHub）。
 
-# DOMAINS                 → 已在 CF 后台配置（可用父域名，逗号分隔）
-# BANNED_PREFIXES         → 已在 CF 后台配置（子域名禁用前缀列表）
-# MAX_SUBDOMAINS_PER_USER → 已在 CF 后台配置（每用户最大子域名数）
-# MAX_RECORDS_PER_SUBDOMAIN → 已在 CF 后台配置（每子域名最大 DNS 记录数）
-# SITE_NAME               → 已在 CF 后台配置（R.O.L. Domain System）
-# EMAIL_VERIFICATION_REQUIRED → 已在 CF 后台配置
-# ALLOWED_EMAIL_DOMAINS   → 已在 CF 后台配置（邮箱域名白名单）
+ADMIN_CONTACT_EMAIL = "admin@mail.rol.moe"
+ALLOWED_EMAIL_DOMAINS = "mail.rol.moe,rol.moe,mail.kivotos.edu.kg,kivotos.edu.kg"
+BANNED_PREFIXES = "www,ns1,ns2,ns,mc,mail,video,tcp,udp,tls,smtp,pop,pop3,imap,ftp,enterpriseenrollment,admin,api,cdn,dev,staging,test,beta,alpha,demo,status,blog,shop,store,app,dashboard,panel,portal,secure,vpn,proxy,relay,mx,mx1,mx2,autoconfig,autodiscover,_dmarc,_domainkey,cpanel,webmail,webdisk,cpcalendars,cpcontacts,ww,ww1,ww2,ww3,dns,dash,gov,edu,ac,pb,voip,abydoss,drs,bg5drs,cc,ddns,api,icp,mail,autodiscover,365"
+DOMAINS = "rol.moe,kivotos.edu.kg"
+EMAIL_VERIFICATION_REQUIRED = "true"
+EMAIL_DAILY_EMAIL_LIMIT = "5"
+MAX_RECORDS_PER_SUBDOMAIN = "1000"
+MAX_SUBDOMAINS_PER_USER = "5"
+SITE_LOGO = "https://sukicdn.com/bg5drs/i/2026/07/04/10ckw.png"
+SITE_NAME = "R.O.L. Domain System"
+SMTP_FROM = "noreply@rol.moe"
+SMTP_FROM_NAME = "R.O.L. Domain System-noreply"
 
-# ========== 站点外观（可选） ==========
+# ========== 未提供 / 可选（保持注释；如需可移除 # 启用，仅限非机密） ==========
 # SITE_BACKGROUND_IMAGE = "https://..."
 # SITE_BACKGROUND_OVERLAY = "rgba(15, 23, 42, 0.7)"
-# SITE_LOGO = "https://..."
-
-# ========== 友情链接（可选） ==========
-# FRIEND_LINKS = '[{"name":"我的博客","url":"https://blog.example.com"}]'
-
-# ========== 联系管理员邮箱（可选，底部显示"联系管理员"按钮） ==========
-# ADMIN_CONTACT_EMAIL = "admin@example.com"
-
-# ========== 备案信息（可选，虚拟备案项目，未配置不显示） ==========
 # SITE_BEIAN = "浙ICP备12345678号-1"
+# FRIEND_LINKS = '[{"name":"我的博客","url":"https://blog.example.com"}]'
+# 走 Resend 时 SMTP_HOST / SMTP_PORT / SMTP_USER / SMTP_PASS 无需配置（仅 SMTP_FROM / SMTP_FROM_NAME 已启用）

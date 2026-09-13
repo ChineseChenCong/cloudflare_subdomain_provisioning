@@ -25,9 +25,12 @@ app.get('/health', (c) => c.json({ status: 'ok', timestamp: new Date().toISOStri
 
 // 路由挂载
 app.route('/auth', authRoutes);
+// 邮箱验证相关路由必须先于 /api 注册：api 路由组挂了 emailVerifiedMiddleware(/*),
+// 若 verification 在其后注册会被一并拦截,导致未验证用户连 /config /send /bind 都 403,
+// 形成「看不到横幅→无法验证→永远 403」的死锁。
+app.route('/api/verification', verificationRoutes);
 app.route('/api', apiRoutes);
 app.route('/api/accounts', accountRoutes);
-app.route('/api/verification', verificationRoutes);
 app.route('/api/proxied', proxiedRoutes);
 app.route('/announcements', announcementRoutes);
 app.route('/', pageRoutes);
