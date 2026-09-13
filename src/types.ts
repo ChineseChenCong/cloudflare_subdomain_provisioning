@@ -37,7 +37,7 @@ export interface User {
   updated_at: string;
 }
 
-export interface SubdomainStatus = 'pending' | 'approved' | 'rejected';
+export type SubdomainStatus = 'pending' | 'approved' | 'rejected';
 
 export interface Subdomain {
   id: number;
