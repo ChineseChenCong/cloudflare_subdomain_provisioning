@@ -76,13 +76,10 @@ function renderPage({
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${siteName}</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@400;500;600;700&amp;family=ZCOOL+KuaiLe&amp;display=swap" rel="stylesheet">
   <style>
     :root {
-      --font-sans: 'Baloo 2', 'ZCOOL KuaiLe', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'YouYuan', '幼圆', 'Comic Sans MS', sans-serif;
-      --font-mono: 'SF Mono', 'Fira Code', 'Fira Mono', 'Roboto Mono', monospace;
+      --font-sans: 'Comic Sans MS', 'YouYuan', '幼圆', 'KaiTi', '楷体', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
+      --font-mono: 'Comic Sans MS', 'Consolas', 'Courier New', monospace;
       --radius: 16px;
       --radius-sm: 10px;
       --transition: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
