@@ -115,36 +115,38 @@ function renderPage({
       --shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.3);
       --glass-bg: rgba(30, 41, 59, 0.8);
       --bg-image: var(--bg-image-dark);
+      --overlay-fallback: rgba(15, 23, 42, 0.7);
     }
 
     [data-theme="light"] {
-      --bg-primary: #f8fafc;
+      --bg-primary: #eff5ff;
       --bg-secondary: #ffffff;
-      --bg-tertiary: #f1f5f9;
+      --bg-tertiary: #e4efff;
       --bg-card: #ffffff;
-      --bg-hover: #f1f5f9;
-      --bg-input: #f8fafc;
-      --border: #e2e8f0;
-      --border-hover: #cbd5e1;
-      --text-primary: #0f172a;
-      --text-secondary: #475569;
-      --text-muted: #94a3b8;
-      --accent: #2563eb;
+      --bg-hover: #e4efff;
+      --bg-input: #ffffff;
+      --border: #d4e4f8;
+      --border-hover: #b3cef6;
+      --text-primary: #0b2b4f;
+      --text-secondary: #3c5e85;
+      --text-muted: #7b9dc2;
+      --accent: #1d7dfa;
       --accent-hover: #3b82f6;
-      --accent-bg: rgba(37, 99, 235, 0.08);
-      --accent-border: rgba(37, 99, 235, 0.3);
-      --danger: #dc2626;
+      --accent-bg: rgba(29, 125, 250, 0.10);
+      --accent-border: rgba(29, 125, 250, 0.32);
+      --danger: #d64040;
       --danger-hover: #ef4444;
-      --danger-bg: rgba(220, 38, 38, 0.08);
-      --success: #16a34a;
-      --success-bg: rgba(22, 163, 74, 0.08);
+      --danger-bg: rgba(214, 64, 64, 0.08);
+      --success: #14914b;
+      --success-bg: rgba(20, 145, 75, 0.08);
       --warning: #d97706;
       --warning-bg: rgba(217, 119, 6, 0.08);
       --pending-bg: rgba(124, 58, 237, 0.08);
       --pending: #7c3aed;
-      --shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
-      --shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.04);
-      --glass-bg: rgba(255, 255, 255, 0.9);
+      --shadow: 0 8px 26px rgba(29, 78, 138, 0.10);
+      --shadow-sm: 0 4px 12px rgba(29, 78, 138, 0.06);
+      --glass-bg: rgba(255, 255, 255, 0.80);
+      --overlay-fallback: rgba(244, 250, 255, 0.55);
     }
 
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -176,7 +178,7 @@ function renderPage({
     .bg-overlay {
       position: absolute;
       inset: 0;
-      background: ${backgroundOverlay || 'rgba(15, 23, 42, 0.7)'};
+      background: ${backgroundOverlay || 'var(--overlay-fallback)'};
     }
     a { color: var(--accent); text-decoration: none; transition: all var(--transition); }
     a:hover { color: var(--accent-hover); }
@@ -285,40 +287,75 @@ function renderPage({
       color: white; 
       box-shadow: 0 4px 14px rgba(59, 130, 246, 0.4);
     }
-    .btn-primary:hover:not(:disabled) { 
+    .btn-primary:hover:not(:disabled) {
       transform: translateY(-2px);
       box-shadow: 0 6px 20px rgba(59, 130, 246, 0.5);
     }
     .btn-primary:active {
       transform: scale(0.95) translateY(0);
     }
-    .btn-secondary { 
-      background: var(--bg-tertiary); 
-      color: var(--text-primary); 
+    .btn-secondary {
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
       border: 1px solid var(--border);
     }
-    .btn-secondary:hover:not(:disabled) { 
-      background: var(--bg-hover); 
+    .btn-secondary:hover:not(:disabled) {
+      background: var(--bg-hover);
       border-color: var(--border-hover);
       transform: translateY(-2px);
     }
-    .btn-danger { 
-      background: linear-gradient(135deg, #ef4444, #dc2626); 
+    .btn-danger {
+      background: linear-gradient(135deg, #ef4444, #dc2626);
       color: white;
       box-shadow: 0 4px 14px rgba(239, 68, 68, 0.3);
     }
-    .btn-danger:hover:not(:disabled) { 
+    .btn-danger:hover:not(:disabled) {
       transform: translateY(-2px);
       box-shadow: 0 6px 20px rgba(239, 68, 68, 0.4);
     }
-    .btn-success { 
-      background: linear-gradient(135deg, #22c55e, #16a34a); 
+    .btn-success {
+      background: linear-gradient(135deg, #22c55e, #16a34a);
       color: white;
       box-shadow: 0 4px 14px rgba(34, 197, 94, 0.3);
     }
-    .btn-success:hover:not(:disabled) { 
+    .btn-success:hover:not(:disabled) {
       transform: translateY(-2px);
       box-shadow: 0 6px 20px rgba(34, 197, 94, 0.4);
+    }
+    [data-theme="light"] .btn-primary {
+      box-shadow: 0 4px 14px rgba(29, 125, 250, 0.25);
+    }
+    [data-theme="light"] .btn-primary:hover:not(:disabled) {
+      box-shadow: 0 8px 24px rgba(29, 125, 250, 0.35);
+      transform: translateY(-3px);
+    }
+    [data-theme="light"] .btn-secondary {
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    }
+    [data-theme="light"] .btn-secondary:hover:not(:disabled) {
+      box-shadow: 0 4px 12px rgba(29, 78, 138, 0.10);
+      transform: translateY(-2px);
+    }
+    [data-theme="light"] .btn-danger {
+      box-shadow: 0 4px 14px rgba(214, 64, 64, 0.25);
+    }
+    [data-theme="light"] .btn-danger:hover:not(:disabled) {
+      box-shadow: 0 8px 24px rgba(214, 64, 64, 0.35);
+      transform: translateY(-3px);
+    }
+    [data-theme="light"] .btn-success {
+      box-shadow: 0 4px 14px rgba(20, 145, 75, 0.25);
+    }
+    [data-theme="light"] .btn-success:hover:not(:disabled) {
+      box-shadow: 0 8px 24px rgba(20, 145, 75, 0.35);
+      transform: translateY(-3px);
+    }
+    [data-theme="light"] .btn-github {
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15);
+    }
+    [data-theme="light"] .btn-github:hover {
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+      transform: translateY(-3px);
     }
     .btn-ghost { 
       background: transparent; 
@@ -400,11 +437,16 @@ function renderPage({
       font-size: 18px; 
       transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
     }
-    .theme-toggle:hover { 
-      background: var(--bg-hover); 
-      color: var(--text-primary); 
+    .theme-toggle:hover {
+      background: var(--bg-hover);
+      color: var(--text-primary);
       border-color: var(--border-hover);
       transform: rotate(180deg) scale(1.1);
+    }
+    [data-theme="light"] .theme-toggle:hover {
+      background: var(--accent-bg);
+      color: var(--accent);
+      border-color: var(--accent-border);
     }
 
     /* ========== 可爱卡片 ========== */
@@ -434,6 +476,14 @@ function renderPage({
       transform: translateY(-4px);
     }
     .card-hover:hover::before {
+      opacity: 1;
+    }
+    .card:hover {
+      border-color: var(--border-hover);
+      box-shadow: var(--shadow-sm);
+      transform: translateY(-3px);
+    }
+    [data-theme="light"] .card:hover::before {
       opacity: 1;
     }
     .card-title { 
@@ -468,10 +518,16 @@ function renderPage({
       transition: all var(--transition); 
       outline: none;
     }
-    .form-input:focus, .form-select:focus { 
-      border-color: var(--accent); 
+    .form-input:focus, .form-select:focus {
+      border-color: var(--accent);
       box-shadow: 0 0 0 4px var(--accent-bg);
       transform: translateY(-2px);
+    }
+    [data-theme="light"] .form-input:focus,
+    [data-theme="light"] .form-select:focus {
+      box-shadow: 0 0 0 6px rgba(29, 125, 250, 0.12);
+      transform: translateY(-2px);
+      border-color: var(--accent-hover);
     }
     .form-input::placeholder { color: var(--text-muted); }
     .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
@@ -2227,7 +2283,13 @@ function renderPage({
         '<a href="#" class="back-link" onclick="navigate(\\'dashboard\\'); return false;">← 返回面板</a>' +
         '<div class="section-header" style="margin-top:16px"><h2 class="section-title" style="display:flex;align-items:center;gap:8px">' + icons.key + ' Cloudflare 账户管理</h2></div>' +
         '<div class="section">' +
-        '<div class="card">' +
+        '<div class="card" style="border-left:4px solid var(--accent)">' +
+        '<div class="card-title">多账户配置说明</div>' +
+        '<p style="color:var(--text-secondary);line-height:1.7;margin-top:8px">本系统支持<strong>多 Cloudflare 账户</strong>：不同域名可绑定不同账户的 Zone。请为每个账户单独创建 API Token，并填写到下方表单。Token 仅用于 DNS 操作，需要 <strong>Zone - Edit</strong> 权限；请勿使用 Global 权限过大的 Token。</p>' +
+        '<p style="color:var(--text-secondary);line-height:1.7;margin-top:8px"><strong>无需配置环境变量</strong>：账户数据与加密 Token 均存储在 D1 的 <code>cloudflare_accounts</code> 表。环境变量中的 <code>CF_API_TOKEN</code> 仅作为无匹配账户时的后备；优先使用账户列表中的 Token。</p>' +
+        '<p style="color:var(--text-secondary);line-height:1.7;margin-top:8px"><strong>子域名代理开关</strong>：绑定账户后，审核通过的子域名可在 DNS 管理页切换黄色云朵（代理）。仅管理员审核通过的子域名可开通代理。</p>' +
+        '</div>' +
+        '<div class="card" style="margin-top:16px">' +
         '<div class="card-title">添加新账户</div>' +
         '<div class="form-group">' +
         '<label class="form-label">账户名称</label>' +
