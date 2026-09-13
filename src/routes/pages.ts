@@ -1628,7 +1628,7 @@ function renderPage({
       if (state.user) {
         let adminLink = '';
         if (state.user.is_admin) {
-          adminLink = '<a href="#" class="btn btn-ghost btn-sm" onclick="navigate(\'admin\'); return false;" style="font-size:13px">' + icons.admin + ' 管理</a>';
+          adminLink = '<a href="#" class="btn btn-ghost btn-sm" onclick="navigate(\\'admin\\'); return false;" style="font-size:13px">' + icons.admin + ' 管理</a>';
         }
         el.innerHTML = '<div class="user-info">' +
           '<img class="user-avatar" src="' + (state.user.avatar_url || '') + '" alt="">' +
@@ -1754,7 +1754,7 @@ function renderPage({
             h += '<button class="btn btn-primary btn-sm btn-jelly" onclick="openDnsManager(' + sub.id + ')">管理 DNS</button>';
           }
 
-          h += '<button class="btn btn-danger btn-sm" onclick="deleteSubdomainConfirm(' + sub.id + ', \'' + escapeHtml(fqdn) + '\')">删除</button>' +
+          h += '<button class="btn btn-danger btn-sm" onclick="deleteSubdomainConfirm(' + sub.id + ',\\'' + escapeHtml(fqdn) + '\\')">删除</button>' +
             '</div></div>';
         });
       }
@@ -1816,7 +1816,7 @@ function renderPage({
       const editing = state.editingRecord;
 
       let h = '<div class="dashboard fade-in">' +
-        '<a href="#" class="back-link" onclick="navigate(\'dashboard\'); return false;">← 返回子域名列表</a>' +
+        '<a href="#" class="back-link" onclick="navigate(\\'dashboard\\'); return false;">← 返回子域名列表</a>' +
         '<div class="dns-header"><h2>' + escapeHtml(fqdn) + ' - DNS 管理</h2></div>' +
         '<p style="font-size:13px;color:var(--text-muted);margin-bottom:20px;">记录: ' + (state.currentRecordCount||0) + ' / ' + (state.maxRecords||20) +
         ' · 名称 @ 或留空 = ' + escapeHtml(fqdn) + '，填 "www" = www.' + escapeHtml(fqdn) + '</p>';
@@ -1866,7 +1866,7 @@ function renderPage({
             '<td><div class="proxied-toggle ' + (r.proxied ? 'active' : '') + '" onclick="toggleProxied(' + r.id + ', ' + r.proxied + ')" title="切换代理状态"></div></td>' +
             '<td><div style="display:flex;gap:4px">' +
             '<button class="btn btn-ghost btn-sm" onclick="editRecord('+r.id+')" title="编辑" style="display:flex">' + icons.edit + '</button>' +
-            '<button class="btn btn-ghost btn-sm" onclick="deleteRecordConfirm('+r.id+', \''+escapeHtml(r.name)+'\', \''+escapeHtml(r.record_type)+'\')" title="删除" style="display:flex">' + icons.trash + '</button>' +
+            '<button class="btn btn-ghost btn-sm" onclick="deleteRecordConfirm('+r.id+',\\''+escapeHtml(r.name)+'\\',\\''+escapeHtml(r.record_type)+'\\')" title="删除" style="display:flex">' + icons.trash + '</button>' +
             '</div></td></tr>';
         });
         h += '</tbody></table></div></div>';
@@ -1974,17 +1974,17 @@ function renderPage({
       const pendingCount = state.adminPending.length;
 
       let h = '<div class="dashboard fade-in">' +
-        '<a href="#" class="back-link" onclick="navigate(\'dashboard\'); return false;">← 返回面板</a>' +
+        '<a href="#" class="back-link" onclick="navigate(\\'dashboard\\'); return false;">← 返回面板</a>' +
         '<div class="section-header" style="margin-top:16px"><h2 class="section-title" style="display:flex;align-items:center;gap:8px">' + icons.admin + ' 管理员面板</h2></div>';
 
       // Tabs
       h += '<div class="tabs">' +
-        '<button class="tab'+(state.adminTab==='pending'?' active':'')+'" onclick="switchAdminTab(\'pending\')">待审核' +
+        '<button class="tab'+(state.adminTab==='pending'?' active':'')+'" onclick="switchAdminTab(\\'pending\\')">待审核' +
         (pendingCount > 0 ? '<span class="tab-count">'+pendingCount+'</span>' : '') + '</button>' +
-        '<button class="tab'+(state.adminTab==='all'?' active':'')+'" onclick="switchAdminTab(\'all\')">所有子域名</button>' +
-        '<button class="tab'+(state.adminTab==='users'?' active':'')+'" onclick="switchAdminTab(\'users\')">用户管理</button>' +
-        '<button class="tab'+(state.adminTab==='announcements'?' active':'')+'" onclick="switchAdminTab(\'announcements\')">公告管理</button>' +
-        '<button class="tab'+(state.adminTab==='accounts'?' active':'')+'" onclick="switchAdminTab(\'accounts\')">' + icons.key + ' Cloudflare 账户</button>' +
+        '<button class="tab'+(state.adminTab==='all'?' active':'')+'" onclick="switchAdminTab(\\'all\\')">所有子域名</button>' +
+        '<button class="tab'+(state.adminTab==='users'?' active':'')+'" onclick="switchAdminTab(\\'users\\')">用户管理</button>' +
+        '<button class="tab'+(state.adminTab==='announcements'?' active':'')+'" onclick="switchAdminTab(\\'announcements\\')">公告管理</button>' +
+        '<button class="tab'+(state.adminTab==='accounts'?' active':'')+'" onclick="switchAdminTab(\\'accounts\\')">' + icons.key + ' Cloudflare 账户</button>' +
         '</div>';
 
       if (state.adminTab === 'pending') {
@@ -2022,8 +2022,8 @@ function renderPage({
           (sub.email ? '<span style="display:flex;align-items:center">' + icons.email + ' ' + escapeHtml(sub.email) + '</span>' : '') +
           '</div></div>' +
           '<div style="display:flex;gap:8px">' +
-          '<button class="btn btn-success btn-sm btn-jelly" onclick="approveSubdomain('+sub.id+', \''+escapeHtml(fqdn)+'\')">' + icons.approved + ' 通过</button>' +
-          '<button class="btn btn-danger btn-sm" onclick="rejectSubdomainModal('+sub.id+', \''+escapeHtml(fqdn)+'\')">' + icons.rejected + ' 拒绝</button>' +
+          '<button class="btn btn-success btn-sm btn-jelly" onclick="approveSubdomain('+sub.id+',\\''+escapeHtml(fqdn)+'\\')">' + icons.approved + ' 通过</button>' +
+          '<button class="btn btn-danger btn-sm" onclick="rejectSubdomainModal('+sub.id+',\\''+escapeHtml(fqdn)+'\\')">' + icons.rejected + ' 拒绝</button>' +
           '</div></div></div>';
       });
       return h;
@@ -2043,7 +2043,7 @@ function renderPage({
           '<td>' + escapeHtml(sub.github_username) + '</td>' +
           '<td>' + statusBadge(sub.status) + '</td>' +
           '<td>' + new Date(sub.created_at).toLocaleDateString('zh-CN') + '</td>' +
-          '<td><button class="btn btn-danger btn-sm" onclick="adminDeleteSubdomain('+sub.id+', \''+escapeHtml(fqdn)+'\')">删除</button></td></tr>';
+          '<td><button class="btn btn-danger btn-sm" onclick="adminDeleteSubdomain('+sub.id+',\\''+escapeHtml(fqdn)+'\\')">删除</button></td></tr>';
       });
       h += '</tbody></table></div></div>';
       return h;
@@ -2100,7 +2100,7 @@ function renderPage({
           '<td style="display:flex;gap:6px">' +
           '<button class="btn btn-sm btn-primary btn-jelly" onclick="startEditAnnouncement(' + a.id + ')">编辑</button>' +
           '<button class="btn btn-sm ' + (a.is_active ? 'btn-ghost' : 'btn-primary') + '" onclick="toggleAnnouncement(' + a.id + ')">' + (a.is_active ? '隐藏' : '显示') + '</button>' +
-          '<button class="btn btn-sm btn-danger" onclick="deleteAnnouncement(' + a.id + ', \'' + escapeHtml(a.title) + '\')">删除</button>' +
+          '<button class="btn btn-sm btn-danger" onclick="deleteAnnouncement(' + a.id + ',\\'' + escapeHtml(a.title) + '\\')">删除</button>' +
           '</td></tr>';
       });
       h += '</tbody></table></div></div>';
@@ -2361,7 +2361,7 @@ function renderPage({
 
     function renderAccountsPage() {
       let h = '<div class="dashboard fade-in">' +
-        '<a href="#" class="back-link" onclick="navigate(\'dashboard\'); return false;">← 返回面板</a>' +
+        '<a href="#" class="back-link" onclick="navigate(\\'dashboard\\'); return false;">← 返回面板</a>' +
         '<div class="section-header" style="margin-top:16px"><h2 class="section-title" style="display:flex;align-items:center;gap:8px">' + icons.key + ' Cloudflare 账户管理</h2></div>' +
         renderAccountsContent() + '</div>';
       return h;
