@@ -102,6 +102,36 @@ app.use('/api/verification/send', async (c, next) => {
   await next();
 });
 
+// ==================== 外链资源代理（本域中转） ====================
+// 外部图片/资源经本站 /assets 转发：HTML 只暴露本站路径、不泄露外链真实域名
+// （防爬虫/扫描发现外链来源）；访客不再直连外部源站，源站只接收 Worker 请求
+// → 保护外链服务器（源站 IP 隐藏、防定向扫描/攻击）。白名单 host 校验防 SSRF，
+// 非开放代理；复用 rateLimit 防刷。
+// /assets 现仅服务 sukicdn.com（logo/背景图代理）。头像已改 GitHub 直连，
+// github/CDN 域名段无需再开放；白名单越窄，SSRF/被借打出面越小。
+// 若日后公告正文需外链图片，再按实际域名逐个加入白名单。
+const ALLOWED_ASSET_HOSTS = ['sukicdn.com'];
+app.get('/assets', async (c) => {
+  const raw = c.req.query('src');
+  if (!raw) return c.json({ error: '缺少资源地址' }, 400);
+  let url: URL;
+  try { url = new URL(raw); } catch { return c.json({ error: '无效地址' }, 400); }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return c.json({ error: '仅允许 http(s)' }, 400);
+  const host = url.hostname.toLowerCase();
+  const allowed = ALLOWED_ASSET_HOSTS.some((h) => host === h || host.endsWith('.' + h));
+  if (!allowed) return c.json({ error: '资源域名不在白名单' }, 403);
+  if (!rateLimit(c, 60_000, 60, 'asset')) return c.json({ error: '请求过于频繁' }, 429);
+  const resp = await fetch(url.toString(), { headers: { 'user-agent': 'R.O.L.-DomainSystem' } });
+  const ct = resp.headers.get('content-type') || 'application/octet-stream';
+  return new Response(resp.body, {
+    status: resp.status,
+    // max-age=1 天+ s-maxage=1 天：浏览器本地缓存 + Cloudflare 边缘 CDN 缓存。
+    // 首个访客触发 Worker→源站后，同图在 1 天内再次被请求直接命中 CF 边缘缓存，
+    // 不再触发 Worker 执行、不计 Worker 请求数、不耗出站 —— 即“走 CDN 分发不耗 Worker”。
+    headers: { 'content-type': ct, 'cache-control': 'public, max-age=86400, s-maxage=86400', 'x-content-type-options': 'nosniff' },
+  });
+});
+
 // 健康检查
 app.get('/health', (c) => c.json({ status: 'ok', timestamp: new Date().toISOString() }));
 
