@@ -76,6 +76,10 @@ function renderPage({
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${siteName}</title>
+  ${siteLogo
+    ? `<link rel="icon" href="${siteLogo}" type="image/png">`
+    : `<link rel="icon" href="data:image/svg+xml;base64,${btoa(defaultLogoSvg)}">`}
+  <link rel="apple-touch-icon" href="${siteLogo || `data:image/svg+xml;base64,${btoa(defaultLogoSvg)}`}">
   <style>
     :root {
       --font-sans: 'Comic Sans MS', 'YouYuan', '幼圆', 'KaiTi', '楷体', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;

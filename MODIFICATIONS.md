@@ -31,7 +31,7 @@
 | 2026-03-15 | 上游基线 commit `42e0779`（作者 Little_100）——fork 起点；此后的任何差异均属本仓库增量 |
 | 2026-09-13 | 本仓库首轮功能演化（单日 8 提交，HEAD=`2492c37`）：多 CF 账户、AES-GCM+SHA-256 密钥派生、GitHub 登录 + 邮箱强制验证 + 死锁/404 修复、公告/友链表、每日限额、前端 UI 定制与转圈修复、`wrangler.toml [vars]` |
 | 2026-09-14 | 本轮（当前工作区未提交）：索引优化迁移 `0006`、公告轮播/缩略展开/置顶/排序前后端、`FRIEND_LINKS` 启用、`BANNED_PREFIXES` 去重并补充「常见保留域」、GPL-3.0 合规文件（LICENSE / NOTICE / MODIFICATIONS.md / MODIFICATIONS.diff） |
-| 2026-09-15 | 本轮（当前工作区未提交）：安全加固（`src/index.ts`：X-Frame-Options/nosniff/HSTS/Referrer-Policy 安全响应头、CORS 收紧为同源、CSRF 二道防线 `csrfAndAudit` 写操作审计日志、`/api/verification/send` 发邮件限流）、公告端 CSRF 缺口补齐、AES 核对（邮箱验证 24h 过期 / JWT 7 天）确认已存在、全站 escapeHtml 复核、`wrangler` 升级 `@4` 与 `wrangler.toml` 增 `[observability.logs]`/`[observability.traces]`（100% 采样 + 含调用日志 + persist 保留仪表板） |
+| 2026-09-15 | 本轮（当前工作区未提交）：安全加固（`src/index.ts`：X-Frame-Options/nosniff/HSTS/Referrer-Policy 安全响应头、CORS 收紧为同源、CSRF 二道防线 `csrfAndAudit` 写操作审计日志、`/api/verification/send` 发邮件限流）、公告端 CSRF 缺口补齐、AES 核对（邮箱验证 24h 过期 / JWT 7 天）确认已存在、全站 escapeHtml 复核、`wrangler` 升级 `@4` 与 `wrangler.toml` 增 `[observability.logs]`/`[observability.traces]`（100% 采样 + 含调用日志 + persist 保留仪表板）、页面标题栏 favicon 复用 siteLogo 图案（`<head>` 新增 `rel="icon"` + `apple-touch-icon`，无 siteLogo 时回退默认 SVG base64） |
 
 > 注：提交后请在本表日期后追加实际 commit 号，或在 git 提交信息中引用本文件。
 
