@@ -37,9 +37,12 @@ admin.get('/', async (c) => {
 // 创建公告
 admin.post('/', async (c) => {
   const user = c.get('user');
-  const body = await c.req
-    .json<{ title: string; content: string }>()
-    .catch(() => ({ title: '', content: '' }));
+  const parsed = await c.req
+    .json<{ title?: string; content?: string; is_pinned?: boolean; sort_order?: number }>()
+    .catch(() => null);
+  const body = { title: '', content: '', is_pinned: undefined, sort_order: undefined, ...(parsed ?? {}) } as {
+    title: string; content: string; is_pinned?: boolean; sort_order?: number;
+  };
 
   if (!body.title || !body.title.trim()) {
     return c.json({ error: '公告标题不能为空' }, 400);
@@ -52,7 +55,9 @@ admin.post('/', async (c) => {
     c.env.DB,
     body.title.trim(),
     body.content.trim(),
-    user.id
+    user.id,
+    body.sort_order,
+    body.is_pinned
   );
 
   if (!created) {
@@ -66,13 +71,15 @@ admin.post('/', async (c) => {
 admin.put('/:id', async (c) => {
   const id = parseInt(c.req.param('id'), 10);
   const body = await c.req
-    .json<{ title?: string; content?: string; is_active?: boolean }>()
-    .catch(() => ({ title: undefined, content: undefined, is_active: undefined }));
+    .json<{ title?: string; content?: string; is_active?: boolean; is_pinned?: boolean; sort_order?: number }>()
+    .catch(() => ({ title: undefined, content: undefined, is_active: undefined, is_pinned: undefined, sort_order: undefined }));
 
   const updated = await updateAnnouncement(c.env.DB, id, {
     title: body.title !== undefined ? body.title.trim() : undefined,
     content: body.content !== undefined ? body.content.trim() : undefined,
     is_active: body.is_active,
+    is_pinned: body.is_pinned,
+    sort_order: body.sort_order,
   });
 
   if (!updated) {

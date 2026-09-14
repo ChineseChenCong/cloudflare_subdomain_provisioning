@@ -44,6 +44,8 @@ export interface Announcement {
   title: string;
   content: string;
   is_active: number;
+  is_pinned: number;   // 1=置顶（轮播中显示全文）；0=普通（按字数缩略，可展开）
+  sort_order: number;  // 展示排序号，越小越靠前；删除后自动紧凑重排不产生空洞
   created_by: number | null;
   created_at: string;
   updated_at: string;

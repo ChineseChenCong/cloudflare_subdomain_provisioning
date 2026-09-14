@@ -1289,6 +1289,73 @@ function renderPage({
       color: var(--text-secondary);
       line-height: 1.7;
     }
+    /* ===== 公告轮播 + 置顶 + 缩略展开 ===== */
+    .announcement-carousel {
+      position: relative;
+      overflow: hidden;
+    }
+    .carousel-slide {
+      display: none;
+    }
+    .carousel-slide.active {
+      display: block;
+      animation: fadeInUp var(--transition);
+    }
+    .announcement-card.pinned {
+      border-color: var(--accent);
+      box-shadow: 0 4px 16px rgba(59, 130, 246, 0.18);
+    }
+    .pin-badge {
+      display: inline-block;
+      font-size: 10px;
+      color: #fff;
+      background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+      border-radius: 999px;
+      padding: 1px 8px;
+      margin-left: 6px;
+      font-weight: 600;
+    }
+    .announcement-content.collapsed {
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .announcement-toggle-btn {
+      margin-top: 6px;
+      padding: 2px 12px;
+      font-size: 12px;
+      cursor: pointer;
+      color: var(--accent);
+      background: transparent;
+      border: 1px solid var(--accent-border);
+      border-radius: 999px;
+      transition: all var(--transition);
+    }
+    .announcement-toggle-btn:hover {
+      border-color: var(--accent);
+      background: rgba(59, 130, 246, 0.1);
+    }
+    .carousel-dots {
+      display: flex;
+      justify-content: center;
+      gap: 6px;
+      margin-top: 8px;
+    }
+    .carousel-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: var(--text-muted);
+      cursor: pointer;
+      opacity: 0.5;
+      transition: all var(--transition);
+    }
+    .carousel-dot.active {
+      background: var(--accent);
+      opacity: 1;
+      width: 18px;
+    }
 
     /* 邮箱验证提示 */
     .verify-banner {
@@ -2080,6 +2147,12 @@ function renderPage({
         '<input type="text" class="form-input" id="ann-title" placeholder="输入标题…" value="' + (escapeHtml(state.editingAnnouncement?.title || '')) + '" /></div>' +
         '<div class="form-group"><label class="form-label">公告内容</label>' +
         '<textarea class="form-input" id="ann-content" rows="4" placeholder="输入公告内容…" style="min-height:100px">' + (escapeHtml(state.editingAnnouncement?.content || '')) + '</textarea></div>' +
+        '<div class="form-group" style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">' +
+        '<label class="form-label" style="margin:0">排序号</label>' +
+        '<input type="number" min="0" class="form-input" id="ann-sort" value="' + (state.editingAnnouncement?.sort_order ?? '') + '" placeholder="0" style="width:100px" />' +
+        '<label class="form-label" style="margin:0;display:flex;align-items:center;gap:6px;cursor:pointer">' +
+        '<input type="checkbox" id="ann-pinned" ' + (state.editingAnnouncement?.is_pinned ? 'checked' : '') + ' /> 置顶（轮播显示全文）</label>' +
+        '</div>' +
         '<div style="display:flex;gap:8px;margin-top:4px">' +
         '<button class="btn btn-primary btn-jelly" onclick="saveAnnouncement()">' + (state.editingAnnouncement ? '保存修改' : '发布公告') + '</button>' +
         (state.editingAnnouncement ? '<button class="btn btn-ghost" onclick="cancelEditAnnouncement()">取消编辑</button>' : '') +
@@ -2092,12 +2165,14 @@ function renderPage({
       }
 
       h += '<div class="card"><div class="table-wrap"><table>' +
-        '<thead><tr><th>标题</th><th>状态</th><th>创建时间</th><th>操作</th></tr></thead><tbody>';
+        '<thead><tr><th>标题</th><th>排序</th><th>状态</th><th>创建时间</th><th>操作</th></tr></thead><tbody>';
       items.forEach(a => {
-        h += '<tr><td><strong>' + escapeHtml(a.title) + '</strong><div style="font-size:12px;color:var(--text-muted)">' + escapeHtml(a.content) + '</div></td>' +
+        h += '<tr><td><strong>' + escapeHtml(a.title) + (a.is_pinned ? '<span class="pin-badge">置顶</span>' : '') + '</strong><div style="font-size:12px;color:var(--text-muted)">' + escapeHtml(a.content) + '</div></td>' +
+          '<td>' + (a.sort_order !== undefined && a.sort_order !== null ? a.sort_order : 0) + '</td>' +
           '<td>' + (a.is_active ? '<span class="badge badge-approved">显示中</span>' : '<span class="badge">已隐藏</span>') + '</td>' +
           '<td>' + new Date(a.created_at).toLocaleDateString('zh-CN') + '</td>' +
           '<td style="display:flex;gap:6px">' +
+          '<button class="btn btn-sm ' + (a.is_pinned ? 'btn-ghost' : 'btn-primary') + '" onclick="toggleAnnouncementPin(' + a.id + ')">' + (a.is_pinned ? '取消置顶' : '置顶') + '</button>' +
           '<button class="btn btn-sm btn-primary btn-jelly" onclick="startEditAnnouncement(' + a.id + ')">编辑</button>' +
           '<button class="btn btn-sm ' + (a.is_active ? 'btn-ghost' : 'btn-primary') + '" onclick="toggleAnnouncement(' + a.id + ')">' + (a.is_active ? '隐藏' : '显示') + '</button>' +
           '<button class="btn btn-sm btn-danger" onclick="deleteAnnouncement(' + a.id + ',\\'' + escapeHtml(a.title) + '\\')">删除</button>' +
@@ -2124,16 +2199,37 @@ function renderPage({
       if (!title) { toast('请输入公告标题', 'error'); return; }
       if (!content) { toast('请输入公告内容', 'error'); return; }
 
+      // 排序号与置顶
+      const sortRaw = document.getElementById('ann-sort')?.value;
+      const sortOrder = sortRaw !== undefined && sortRaw !== '' ? parseInt(sortRaw, 10) : NaN;
+      const pinned = !!document.getElementById('ann-pinned')?.checked;
+      const payload = {
+        title, content,
+        is_pinned: pinned,
+        sort_order: Number.isNaN(sortOrder) ? undefined : sortOrder
+      };
+
       try {
         const editing = state.editingAnnouncement;
         if (editing) {
-          await annApi('/admin/' + editing.id, { method: 'PUT', body: JSON.stringify({ title, content }) });
+          await annApi('/admin/' + editing.id, { method: 'PUT', body: JSON.stringify(payload) });
           toast('公告已更新', 'success');
         } else {
-          await annApi('/admin', { method: 'POST', body: JSON.stringify({ title, content }) });
+          await annApi('/admin', { method: 'POST', body: JSON.stringify(payload) });
           toast('公告已发布', 'success');
         }
         state.editingAnnouncement = null;
+        await loadAdminData();
+        render();
+      } catch (err) { toast(err.message, 'error'); }
+    }
+
+    async function toggleAnnouncementPin(id) {
+      const a = state.adminAnnouncements.find(x => x.id === id);
+      if (!a) return;
+      try {
+        await annApi('/admin/' + id, { method: 'PUT', body: JSON.stringify({ is_pinned: !a.is_pinned }) });
+        toast(a.is_pinned ? '已取消置顶' : '已置顶（轮播显示全文）', 'success');
         await loadAdminData();
         render();
       } catch (err) { toast(err.message, 'error'); }
@@ -2393,23 +2489,74 @@ function renderPage({
       return h;
     }
 
-    // ==================== Announcements (公告) ====================
+    // ==================== Announcements (公告：置顶全文 + 轮播缩略可展开) ====================
+    // 展示规则：is_pinned=1 的公告直出完整内容（带「置顶」徽标）；
+    // 其余公告进入轮播区，默认按字数缩略（3 行截断），可点击「展开全文/收起」阅读完整内容。
     async function loadAnnouncements() {
       const container = document.getElementById('announcements');
       if (!container) return;
       try {
         const data = await annApi('');
         const list = data.announcements || [];
-        if (list.length === 0) { container.innerHTML = ''; return; }
-        container.innerHTML = list.map(function (a) {
+        if (!list.length) { container.innerHTML = ''; return; }
+        const pinned = list.filter(a => a.is_pinned);
+        const normal = list.filter(a => !a.is_pinned);
+        let h = '';
+        // 置顶：完整内容直出
+        pinned.forEach(function (a) {
           const date = (a.created_at || '').slice(0, 10);
-          return '<div class="announcement-card fade-in">' +
-            '<div class="announcement-title">📢 ' + escapeHtml(a.title) + '<span class="announcement-date">' + date + '</span></div>' +
+          h += '<div class="announcement-card pinned fade-in">' +
+            '<div class="announcement-title">📢 ' + escapeHtml(a.title) +
+            '<span class="pin-badge">置顶</span><span class="announcement-date">' + date + '</span></div>' +
             '<div class="announcement-content">' + escapeHtml(a.content) + '</div></div>';
-        }).join('');
+        });
+        // 普通：进轮播，每张缩略可展开
+        if (normal.length) {
+          h += '<div class="announcement-carousel">';
+          normal.forEach(function (a, i) {
+            const date = (a.created_at || '').slice(0, 10);
+            h += '<div class="carousel-slide' + (i === 0 ? ' active' : '') + '" id="ann-slide-' + i + '">' +
+              '<div class="announcement-card fade-in">' +
+              '<div class="announcement-title">📢 ' + escapeHtml(a.title) + '<span class="announcement-date">' + date + '</span></div>' +
+              '<div class="announcement-content collapsed" id="ann-body-' + i + '">' + escapeHtml(a.content) + '</div>' +
+              '<button type="button" class="announcement-toggle-btn" onclick="toggleAnnouncementBody(' + i + ', this)">展开全文</button>' +
+              '</div></div>';
+          });
+          h += '<div class="carousel-dots">';
+          normal.forEach(function (_, i) {
+            h += '<span class="carousel-dot' + (i === 0 ? ' active' : '') + '" onclick="goAnnouncementSlide(' + i + ')"></span>';
+          });
+          h += '</div></div>';
+        }
+        container.innerHTML = h;
+        // 启动轮播定时切换
+        if (normal.length > 1) {
+          window.clearInterval(window.__annTimer);
+          let idx = 0;
+          window.__annTimer = window.setInterval(function () {
+            idx = (idx + 1) % normal.length;
+            goAnnouncementSlide(idx);
+          }, 5000);
+        }
       } catch (err) {
         console.error('Failed to load announcements:', err);
       }
+    }
+
+    // 展开/收起某条轮播公告的全文
+    function toggleAnnouncementBody(i, btn) {
+      const el = document.getElementById('ann-body-' + i);
+      if (!el) return;
+      el.classList.toggle('collapsed');
+      btn.textContent = el.classList.contains('collapsed') ? '展开全文' : '收起';
+    }
+
+    // 轮播切到第 i 张
+    function goAnnouncementSlide(i) {
+      const slides = document.querySelectorAll('#announcements .carousel-slide');
+      const dots = document.querySelectorAll('#announcements .carousel-dot');
+      slides.forEach(function (s, k) { s.classList.toggle('active', k === i); });
+      dots.forEach(function (d, k) { d.classList.toggle('active', k === i); });
     }
 
     // ==================== Init ====================

@@ -580,15 +580,17 @@ export async function removeEmailDomainFromWhitelist(
 // ==================== Announcements (公告) ====================
 
 export async function getActiveAnnouncements(db: D1Database): Promise<Announcement[]> {
+  // 排序：置顶优先 → 展示序号升序 → id 升序（稳定）
   const result = await db
-    .prepare('SELECT * FROM announcements WHERE is_active = 1 ORDER BY created_at DESC, id DESC')
+    .prepare('SELECT * FROM announcements WHERE is_active = 1 ORDER BY is_pinned DESC, sort_order ASC, id ASC')
     .all<Announcement>();
   return result.results;
 }
 
 export async function getAllAnnouncements(db: D1Database): Promise<Announcement[]> {
+  // 管理列表：启用在前，再按置顶/序号；隐藏的排最后仍可见
   const result = await db
-    .prepare('SELECT * FROM announcements ORDER BY created_at DESC, id DESC')
+    .prepare('SELECT * FROM announcements ORDER BY is_active DESC, is_pinned DESC, sort_order ASC, id ASC')
     .all<Announcement>();
   return result.results;
 }
@@ -597,13 +599,23 @@ export async function createAnnouncement(
   db: D1Database,
   title: string,
   content: string,
-  createdBy: number | null
+  createdBy: number | null,
+  sortOrder?: number,
+  isPinned?: boolean
 ): Promise<Announcement | null> {
+  // 未指定排序号时，取当前最大值 + 1（排到末尾）
+  let order = sortOrder;
+  if (order === undefined || Number.isNaN(order)) {
+    const max = await db
+      .prepare('SELECT COALESCE(MAX(sort_order), -1) AS m FROM announcements')
+      .first<{ m: number }>();
+    order = (max?.m ?? -1) + 1;
+  }
   const result = await db
     .prepare(
-      'INSERT INTO announcements (title, content, is_active, created_by) VALUES (?, ?, 1, ?)'
+      'INSERT INTO announcements (title, content, is_active, is_pinned, sort_order, created_by) VALUES (?, ?, 1, ?, ?, ?)'
     )
-    .bind(title, content, createdBy)
+    .bind(title, content, isPinned ? 1 : 0, order, createdBy)
     .run();
 
   const id = result.meta.last_row_id;
@@ -616,7 +628,7 @@ export async function createAnnouncement(
 export async function updateAnnouncement(
   db: D1Database,
   id: number,
-  updates: { title?: string; content?: string; is_active?: boolean }
+  updates: { title?: string; content?: string; is_active?: boolean; is_pinned?: boolean; sort_order?: number }
 ): Promise<Announcement | null> {
   const setParts: string[] = [];
   const values: unknown[] = [];
@@ -633,6 +645,14 @@ export async function updateAnnouncement(
     setParts.push('is_active = ?');
     values.push(updates.is_active ? 1 : 0);
   }
+  if (updates.is_pinned !== undefined) {
+    setParts.push('is_pinned = ?');
+    values.push(updates.is_pinned ? 1 : 0);
+  }
+  if (updates.sort_order !== undefined && !Number.isNaN(updates.sort_order)) {
+    setParts.push('sort_order = ?');
+    values.push(updates.sort_order);
+  }
   setParts.push('updated_at = datetime("now")');
 
   if (setParts.length === 1) return null;
@@ -646,8 +666,23 @@ export async function updateAnnouncement(
   return db.prepare('SELECT * FROM announcements WHERE id = ?').bind(id).first<Announcement>();
 }
 
+// 删除公告后，对剩余公告做「展示序号紧凑重排」：sort_order 连续无空洞。
+// 说明：只操作展示序号列（sort_order），绝不触碰被外键引用的主键 id，
+// 满足“删除后有序替补空白、防止序号逐渐增大”且不影响既有引用关系的诉求。
 export async function deleteAnnouncement(db: D1Database, id: number): Promise<void> {
   await db.prepare('DELETE FROM announcements WHERE id = ?').bind(id).run();
+  await db
+    .prepare(
+      `WITH ranked AS (
+         SELECT id,
+                ROW_NUMBER() OVER (ORDER BY is_active DESC, is_pinned DESC, sort_order ASC, id ASC) - 1 AS new_sort
+         FROM announcements
+       )
+       UPDATE announcements
+       SET sort_order = (SELECT new_sort FROM ranked WHERE ranked.id = announcements.id),
+           updated_at = datetime('now')`
+    )
+    .run();
 }
 
 // ==================== Friend Links (友情链接，数据库版备用) ====================

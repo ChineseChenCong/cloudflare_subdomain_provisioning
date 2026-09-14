@@ -18,7 +18,7 @@ database_id = "c888cdd9-b2f8-4501-92ab-5d3872406f1e"
 
 ADMIN_CONTACT_EMAIL = "admin@mail.rol.moe"
 ALLOWED_EMAIL_DOMAINS = "mail.rol.moe,rol.moe,mail.kivotos.edu.kg,kivotos.edu.kg"
-BANNED_PREFIXES = "www,ns1,ns2,ns,mc,mail,video,tcp,udp,tls,smtp,pop,pop3,imap,ftp,enterpriseenrollment,admin,api,cdn,dev,staging,test,beta,alpha,demo,status,blog,shop,store,app,dashboard,panel,portal,secure,vpn,proxy,relay,mx,mx1,mx2,autoconfig,autodiscover,_dmarc,_domainkey,cpanel,webmail,webdisk,cpcalendars,cpcontacts,ww,ww1,ww2,ww3,dns,dash,gov,edu,ac,pb,voip,abydoss,drs,bg5drs,cc,ddns,api,icp,mail,autodiscover,365"
+BANNED_PREFIXES = "www,ns1,ns2,ns,mc,mail,video,tcp,udp,tls,smtp,pop,pop3,imap,ftp,enterpriseenrollment,admin,api,cdn,dev,staging,test,beta,alpha,demo,status,blog,shop,store,app,dashboard,panel,portal,secure,vpn,proxy,relay,mx,mx1,mx2,autoconfig,autodiscover,_dmarc,_domainkey,cpanel,webmail,webdisk,cpcalendars,cpcontacts,ww,ww1,ww2,ww3,dns,dash,gov,edu,ac,pb,voip,abydoss,drs,bg5drs,cc,ddns,icp,365,ts,teamspeak,url,dwz,web,webs,ddos,dos,user,localhost,docs,support,help,about,faq,m,mobile,root,server,host,default,postmaster,hostmaster,webmaster,abuse,info,noreply,download,static,img,assets,media,service,services,gateway,primary,secondary,dns1,dns2,external,webhook"
 DOMAINS = "rol.moe,kivotos.edu.kg"
 EMAIL_VERIFICATION_REQUIRED = "true"
 EMAIL_DAILY_EMAIL_LIMIT = "5"
@@ -33,5 +33,5 @@ SMTP_FROM_NAME = "R.O.L. Domain System-noreply"
 # SITE_BACKGROUND_IMAGE = "https://..."
 # SITE_BACKGROUND_OVERLAY = "rgba(15, 23, 42, 0.7)"
 # SITE_BEIAN = "浙ICP备12345678号-1"
-# FRIEND_LINKS = '[{"name":"我的博客","url":"https://blog.example.com"}]'
+FRIEND_LINKS = '[{"name":"莉莉安尼亚邮箱系统","url":"https://mail.rol.moe","description":"莉莉安尼亚官方电子邮箱"}]'
 # 走 Resend 时 SMTP_HOST / SMTP_PORT / SMTP_USER / SMTP_PASS 无需配置（仅 SMTP_FROM / SMTP_FROM_NAME 已启用）
