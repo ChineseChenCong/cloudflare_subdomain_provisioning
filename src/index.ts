@@ -1,3 +1,4 @@
+import { Context } from 'hono';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import type { Env, User } from './types';
@@ -12,14 +13,94 @@ import { verifyEmailByToken } from './services/email-verification';
 
 type Variables = { user: User };
 
+// ==================== 安全辅助（同源 / 限流） ====================
+// 判断请求是否来自本站（Origin 或 Referer 与当前 origin 一致；两者皆缺视为同源/API 客户端放行）
+function isSameOrigin(c: Context): boolean {
+  const self = new URL(c.req.url).origin;
+  const origin = c.req.header('origin');
+  if (origin) {
+    try { return new URL(origin).origin === self; } catch { return false; }
+  }
+  const referer = c.req.header('referer');
+  if (referer) {
+    try { return new URL(referer).origin === self; } catch { return false; }
+  }
+  return true;
+}
+
+// 轻量内存窗口限流（单 isolate 内存，基础防护；用于发邮件等易被刷的接口）
+const rateBuckets = new Map<string, { first: number; count: number }>();
+function rateLimit(c: Context, windowMs: number, max: number, keyBase: string): boolean {
+  const ip = c.req.header('CF-Connecting-IP') || 'unknown';
+  const now = Date.now();
+  const key = `${keyBase}:${ip}`;
+  const b = rateBuckets.get(key);
+  if (!b || now - b.first >= windowMs) {
+    if (rateBuckets.size > 10000) rateBuckets.clear();
+    rateBuckets.set(key, { first: now, count: 1 });
+    return true;
+  }
+  if (b.count >= max) return false;
+  b.count++;
+  return true;
+}
+
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
-// CORS
+// ==================== 安全响应头 ====================
+// 非破坏性安全头。注意：CSP 刻意不加——本项目前端（pages.ts）有大量内联
+// script/style/onclick，若加严格 CSP 会直接破坏页面显示与功能，违背
+// “安全与功能/显示均最佳”的叠加目标。
+app.use('*', async (c, next) => {
+  c.header('X-Frame-Options', 'DENY');
+  c.header('X-Content-Type-Options', 'nosniff');
+  c.header('Referrer-Policy', 'strict-origin-when-cross-origin');
+  c.header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  await next();
+});
+
+// ==================== CORS（仅同源，收紧替代 origin:'*'） ====================
+// 同源请求浏览器本不依赖 CORS；跨源则返回空 → 浏览器拒绝跨域读写，缩小凭证暴露面。
 app.use('/api/*', cors({
-  origin: '*',
+  origin: (origin, c) => {
+    if (!origin) return '';
+    try {
+      return new URL(origin).origin === new URL(c.req.url).origin ? origin : '';
+    } catch {
+      return '';
+    }
+  },
   allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowHeaders: ['Content-Type', 'Authorization'],
 }));
+
+// ==================== CSRF 二道防线 + 写操作审计日志 ====================
+// cookie sameSite=Lax 已挡大部分跨站；此处再加 Origin/Referer 校验作为纵深。
+// 同时对写方法输出结构化审计日志（零 DB，console.log → Dashboard Logs / wrangler tail，
+// 保留约 3 天）：记录 时间/方法/路径/IP，不携带任何私有数据。
+const csrfAndAudit = async (c: Context, next: any) => {
+  const m = c.req.method;
+  if (m === 'POST' || m === 'PUT' || m === 'DELETE' || m === 'PATCH') {
+    const ip = c.req.header('CF-Connecting-IP') || '-';
+    console.log(`[audit] ${new Date().toISOString()} ${m} ${c.req.path} ip=${ip}`);
+    if (!isSameOrigin(c)) {
+      return c.json({ error: 'CSRF: 跨源请求被拒绝' }, 403);
+    }
+  }
+  await next();
+};
+// /api/* 与 /announcements（公告管理也含写方法，一并纳入 CSRF 与审计）
+app.use('/api/*', csrfAndAudit);
+app.use('/announcements', csrfAndAudit);
+
+// ==================== 发邮件接口限流（防刷） ====================
+// 每 IP 每分钟最多 5 次验证邮件发送请求（叠加既有“每用户每日 5 封”）。
+app.use('/api/verification/send', async (c, next) => {
+  if (!rateLimit(c, 60_000, 5, 'verify-send')) {
+    return c.json({ error: '请求过于频繁，请稍后再试' }, 429);
+  }
+  await next();
+});
 
 // 健康检查
 app.get('/health', (c) => c.json({ status: 'ok', timestamp: new Date().toISOString() }));

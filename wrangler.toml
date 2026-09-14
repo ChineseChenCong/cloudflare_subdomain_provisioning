@@ -35,3 +35,20 @@ SMTP_FROM_NAME = "R.O.L. Domain System-noreply"
 # SITE_BEIAN = "浙ICP备12345678号-1"
 FRIEND_LINKS = '[{"name":"莉莉安尼亚邮箱系统","url":"https://mail.rol.moe","description":"莉莉安尼亚官方电子邮箱"}]'
 # 走 Resend 时 SMTP_HOST / SMTP_PORT / SMTP_USER / SMTP_PASS 无需配置（仅 SMTP_FROM / SMTP_FROM_NAME 已启用）
+
+# ===================== 可观测性（wrangler@4 官方推荐 logs/traces 子块） =====================
+# 参考 Cloudflare 官方「可观测性」配置，确保各部署设置一致：
+#   [observability.logs]   → enabled=true 100% 采样、invocation_logs=true（含调用日志）、
+#                            persist=true（日志保留到 Workers 仪表板，配合源码 [audit] 审计行）。
+#   [observability.traces] → enabled=true 100% 采样、persist=true（跟踪数据保留到仪表板）。
+# 此子块结构仅 wrangler@4 支持（3.x 顶层只认 enabled+head_sampling_rate，故须升级 wrangler@4）。
+[observability.logs]
+enabled = true
+head_sampling_rate = 1
+invocation_logs = true
+persist = true
+
+[observability.traces]
+enabled = true
+head_sampling_rate = 1
+persist = true

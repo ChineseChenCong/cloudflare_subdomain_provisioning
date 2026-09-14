@@ -1292,7 +1292,24 @@ function renderPage({
     /* ===== 公告轮播 + 置顶 + 缩略展开 ===== */
     .announcement-carousel {
       position: relative;
+      /* 不能 here overflow:hidden，否则展开后的全文会被裁剪；
+         用 visible，让「展开」可自然撑高阅读全文。未展开时各卡片
+         缩略同高（3 行）+ min-height 兜底，切换轮播不上下跳动。 */
+      overflow: visible;
+      min-height: 134px;
+    }
+    /* 轮播内标题单行省略，防止标题换行造成高度差异 */
+    .announcement-carousel .announcement-title {
+      white-space: nowrap;
       overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    /* 缩略区固定 3 行占位高度（与 -webkit-line-clamp:3 一致，1.7 行高），
+       保证未展开时每张公告卡片同高，切换轮播平稳 */
+    .announcement-carousel .announcement-content.collapsed {
+      height: 5.1em;
+      overflow: hidden;
+      white-space: normal;
     }
     .carousel-slide {
       display: none;
@@ -2212,15 +2229,21 @@ function renderPage({
       try {
         const editing = state.editingAnnouncement;
         if (editing) {
-          await annApi('/admin/' + editing.id, { method: 'PUT', body: JSON.stringify(payload) });
+          const r = await annApi('/admin/' + editing.id, { method: 'PUT', body: JSON.stringify(payload) });
           toast('公告已更新', 'success');
+          if (r && r.announcement) {
+            for (let i = 0; i < state.adminAnnouncements.length; i++) {
+              if (state.adminAnnouncements[i].id === r.announcement.id) { state.adminAnnouncements[i] = r.announcement; break; }
+            }
+          }
         } else {
-          await annApi('/admin', { method: 'POST', body: JSON.stringify(payload) });
+          const r = await annApi('/admin', { method: 'POST', body: JSON.stringify(payload) });
           toast('公告已发布', 'success');
+          if (r && r.announcement) { state.adminAnnouncements.push(r.announcement); }
         }
         state.editingAnnouncement = null;
-        await loadAdminData();
-        render();
+        sortAnnouncements();
+        rerender();
       } catch (err) { toast(err.message, 'error'); }
     }
 
@@ -2228,10 +2251,15 @@ function renderPage({
       const a = state.adminAnnouncements.find(x => x.id === id);
       if (!a) return;
       try {
-        await annApi('/admin/' + id, { method: 'PUT', body: JSON.stringify({ is_pinned: !a.is_pinned }) });
+        const r = await annApi('/admin/' + id, { method: 'PUT', body: JSON.stringify({ is_pinned: !a.is_pinned }) });
         toast(a.is_pinned ? '已取消置顶' : '已置顶（轮播显示全文）', 'success');
-        await loadAdminData();
-        render();
+        if (r && r.announcement) {
+          for (let i = 0; i < state.adminAnnouncements.length; i++) {
+            if (state.adminAnnouncements[i].id === r.announcement.id) { state.adminAnnouncements[i] = r.announcement; break; }
+          }
+          sortAnnouncements();
+        }
+        rerender();
       } catch (err) { toast(err.message, 'error'); }
     }
 
@@ -2239,10 +2267,15 @@ function renderPage({
       const a = state.adminAnnouncements.find(x => x.id === id);
       if (!a) return;
       try {
-        await annApi('/admin/' + id, { method: 'PUT', body: JSON.stringify({ is_active: !a.is_active }) });
+        const r = await annApi('/admin/' + id, { method: 'PUT', body: JSON.stringify({ is_active: !a.is_active }) });
         toast(a.is_active ? '公告已隐藏' : '公告已显示', 'success');
-        await loadAdminData();
-        render();
+        if (r && r.announcement) {
+          for (let i = 0; i < state.adminAnnouncements.length; i++) {
+            if (state.adminAnnouncements[i].id === r.announcement.id) { state.adminAnnouncements[i] = r.announcement; break; }
+          }
+          sortAnnouncements();
+        }
+        rerender();
       } catch (err) { toast(err.message, 'error'); }
     }
 
@@ -2251,8 +2284,9 @@ function renderPage({
         try {
           await annApi('/admin/' + id, { method: 'DELETE' });
           toast('公告已删除', 'success');
-          await loadAdminData();
-          render();
+          state.adminAnnouncements = state.adminAnnouncements.filter(function (x) { return x.id !== id; });
+          sortAnnouncements();
+          rerender();
         } catch (err) { toast(err.message, 'error'); }
       });
     }
@@ -2453,6 +2487,27 @@ function renderPage({
           app.innerHTML = renderDashboard();
           break;
       }
+    }
+
+    // 保持滚动位置地重绘当前视图：保存后刷新不回到顶部、不重登主页
+    function rerender() {
+      const y = window.scrollY || 0;
+      render();
+      requestAnimationFrame(function () { window.scrollTo(0, y); });
+    }
+
+    // 与后端一致：启用 → 置顶 → 排序号 → id 排序公告（管理列表展示顺序）
+    function sortAnnouncements() {
+      const arr = state.adminAnnouncements || [];
+      arr.sort(function (a, b) {
+        const ak = (a.is_active ? 0 : 1), bk = (b.is_active ? 0 : 1);
+        if (ak !== bk) return ak - bk;
+        const ap = (a.is_pinned ? 0 : 1), bp = (b.is_pinned ? 0 : 1);
+        if (ap !== bp) return ap - bp;
+        const aso = (a.sort_order || 0), bso = (b.sort_order || 0);
+        if (aso !== bso) return aso - bso;
+        return a.id - b.id;
+      });
     }
 
     function renderAccountsPage() {

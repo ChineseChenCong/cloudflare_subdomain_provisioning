@@ -31,6 +31,7 @@
 | 2026-03-15 | 上游基线 commit `42e0779`（作者 Little_100）——fork 起点；此后的任何差异均属本仓库增量 |
 | 2026-09-13 | 本仓库首轮功能演化（单日 8 提交，HEAD=`2492c37`）：多 CF 账户、AES-GCM+SHA-256 密钥派生、GitHub 登录 + 邮箱强制验证 + 死锁/404 修复、公告/友链表、每日限额、前端 UI 定制与转圈修复、`wrangler.toml [vars]` |
 | 2026-09-14 | 本轮（当前工作区未提交）：索引优化迁移 `0006`、公告轮播/缩略展开/置顶/排序前后端、`FRIEND_LINKS` 启用、`BANNED_PREFIXES` 去重并补充「常见保留域」、GPL-3.0 合规文件（LICENSE / NOTICE / MODIFICATIONS.md / MODIFICATIONS.diff） |
+| 2026-09-15 | 本轮（当前工作区未提交）：安全加固（`src/index.ts`：X-Frame-Options/nosniff/HSTS/Referrer-Policy 安全响应头、CORS 收紧为同源、CSRF 二道防线 `csrfAndAudit` 写操作审计日志、`/api/verification/send` 发邮件限流）、公告端 CSRF 缺口补齐、AES 核对（邮箱验证 24h 过期 / JWT 7 天）确认已存在、全站 escapeHtml 复核、`wrangler` 升级 `@4` 与 `wrangler.toml` 增 `[observability.logs]`/`[observability.traces]`（100% 采样 + 含调用日志 + persist 保留仪表板） |
 
 > 注：提交后请在本表日期后追加实际 commit 号，或在 git 提交信息中引用本文件。
 
@@ -139,6 +140,32 @@
 
 ---
 
+### 9. 安全加固与可观测性（2026-09-15 本轮）
+- `src/index.ts`（修改）：新增全局安全响应头 `X-Frame-Options: DENY`、
+  `X-Content-Type-Options: nosniff`、`Referrer-Policy: strict-origin-when-cross-origin`、
+  `Strict-Transport-Security: max-age=31536000; includeSubDomains`；CORS 由
+  `origin:'*'` 收紧为**仅回显同源**（跨源返回空 → 浏览器拒绝）；新增 **CSRF 二道防线**
+  （写方法 POST/PUT/DELETE/PATCH 校验 Origin/Referer 同源，跨源 403）并同挂
+  `/api/*` 与 `/announcements`（补齐公告端此前无 CSRF 的缺口）；写方法统一输出
+  审计日志 `console.log('[audit] <ISO时间> <METHOD> <path> ip=<CF-Connecting-IP>')`
+  （零 DB，配合 `[observability].persist` 保留仪表板可回溯，不携私有数据）；
+  新增 `/api/verification/send` **发邮件限流**（每 IP 每分钟 5 次，叠加既有
+  每用户每日 5 封）。
+- 安全核对（本轮）：邮箱验证 token 24h 过期、JWT 7 天有效期**原本已存在**，未改动；
+  全站 `escapeHtml` 覆盖复核通过。⚠️ CSP **不启用**：前端（pages.ts）大量内联
+  script/style/onclick，严格 CSP 会破坏页面显示与功能。
+- `wrangler.toml`（修改）：新增 `[observability.logs]`（`enabled`、`head_sampling_rate=1`、
+  `invocation_logs`、`persist`）与 `[observability.traces]`（`enabled`、
+  `head_sampling_rate=1`、`persist`）：100% 采样 + 含调用日志/跟踪持久保留到
+  Workers 仪表板（需 `wrangler@4` 支持此子块结构）。
+- `package.json` / `package-lock.json`（修改）：`wrangler` 升级 `4.131.2`
+  （Dev 依赖；`@cloudflare/workers-types@4` 保留，以 `--legacy-peer-deps` 绕过其
+  peerOptional 版本冲突）。
+- 合规复核（本轮）：新增安全与可观测改动已并入本文件「时间节点」与「明细」，
+  仍以 GPL-3.0 授权再分发。
+
+---
+
 ## 四、合规义务履行声明
 
 1. 本仓库为上游 GPL 授权项目的 **fork / 派生修改版**，已在 LICENSE、NOTICE、
@@ -148,3 +175,42 @@
 3. 任何再分发/再修改须保留本 LICENSE、NOTICE、MODIFICATIONS.md，并继续以
    GPL-3.0 条款发布。
 4. 软件按 GPL-3.0 第 11/12 条「无担保」条款提供。
+
+---
+
+## 五、AI 使用与 Vibe Coding 声明（AI-Assisted Development Notice）
+
+> 依 GPL-3.0「再分发/修改明确告知」精神并经维护者确认：
+> **本仓库相对上游的全部修改，均以 Vibe Coding（AI 辅助编码）流程生成**，
+> 特此披露 AI 使用相关信息，供接收者核验与追溯。
+
+### 1. 修改生成方式（Vibe Coding）
+本 fork 的每一处功能、安全、迁移与合规改动，均由「人类维护者 + AI 辅助代理」
+的 **Vibe Coding** 协作流程逐轮产生——
+1. 维护者在仓库工作区给出**意图 / 需求提示**（如「多 CF 账户支持」「修复验证死锁」、
+   「安全加固」「加入 0006 索引迁移」）。
+2. **AI 辅助代理**据此读取现有源码，生成并自动写入**代码、SQL 迁移、前端脚本、
+   配置文件与合规文档**，并在同轮内持续审查、修正与验证
+   （`npx tsc --noEmit`、`npx wrangler deploy --dry-run` 等）。
+3. 维护者**复核确认后**手动执行 `git commit` 与线上部署。
+
+即：所有生成内容（源码、`migrations/*.sql`、`wrangler.toml`、`MODIFICATIONS.md`
+等）即本仓库的实际内容，不存在另存的“AI 私有成果”。
+
+### 2. AI 使用相关信息
+| 项 | 值 |
+|---|---|
+| 开发/代理框架 | **QwenPaw**（AgentScope 团队 / Qwen lab 开源的 agent 框架，MIT 许可） |
+| 生成所用大模型 | **deepseek-ai/DeepSeek-V4-Flash**（后台代理服务运行的对话模型） |
+| 协作方式 | 后台代理自动读写工作区源码/配置；git 提交与部署由维护者手动执行 |
+| 生成覆盖范围 | 2026-09-13 起的功能演化 → 2026-09-14 索引/公告/合规 →
+  2026-09-15 安全加固/可观测性（详见「时间节点」表） |
+| 可复现性 | 全部改动在公开 git 历史与本文件「修改明细」中可完全定位，无第三方闭源组件 |
+
+### 3. 质量与合规归属
+- AI 生成的每批改动均经 `npx tsc --noEmit`、`npx wrangler deploy --dry-run`
+  等验证通过后才提交；未引入未知依赖（依赖改动已在 `package.json`/`package-lock.json` 明确）。
+- **AI 辅助生成不影响 GPL-3.0 义务**：上述生成内容与人工修改同等落入本仓库、
+  同受 GPL-3.0 授权，接收者仍须遵守随附 `LICENSE` / `NOTICE` / 本 `MODIFICATIONS.md`。
+
+—— R.O.L. Domain System（Vibe Coding 演化版）
