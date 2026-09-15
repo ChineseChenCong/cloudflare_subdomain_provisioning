@@ -1,14 +1,15 @@
-import type { Env, CloudflareAccount, DomainConfig } from '../types';
-import { encryptText, decryptText } from './crypto';
+import type { Env, CloudflareAccount, DomainConfig } from "../types";
+import { encryptText, decryptText } from "./crypto";
+import { mirrorSyncRow } from "./mirror";
 import {
   verifyToken,
   listDnsRecords,
   createDnsRecord as cfCreateDnsRecord,
   updateDnsRecord as cfUpdateDnsRecord,
   deleteDnsRecord as cfDeleteDnsRecord,
-} from './cloudflare';
+} from "./cloudflare";
 
-const CF_API_BASE = 'https://api.cloudflare.com/client/v4';
+const CF_API_BASE = "https://api.cloudflare.com/client/v4";
 
 /**
  * 获取用户的 Cloudflare 账户列表
@@ -16,10 +17,12 @@ const CF_API_BASE = 'https://api.cloudflare.com/client/v4';
 export async function getUserAccounts(
   db: D1Database,
   env: { ENCRYPTION_KEY?: string },
-  userId: number
+  userId: number,
 ): Promise<(CloudflareAccount & { api_token_decrypted?: string })[]> {
   const result = await db
-    .prepare('SELECT * FROM cloudflare_accounts WHERE user_id = ? ORDER BY is_default DESC, created_at DESC')
+    .prepare(
+      "SELECT * FROM cloudflare_accounts WHERE user_id = ? ORDER BY is_default DESC, created_at DESC",
+    )
     .bind(userId)
     .all<CloudflareAccount>();
 
@@ -29,7 +32,7 @@ export async function getUserAccounts(
     const decrypted = await decryptToken(env, account);
     accounts.push({
       ...account,
-      api_token_decrypted: decrypted || '',
+      api_token_decrypted: decrypted || "",
     });
   }
 
@@ -42,10 +45,12 @@ export async function getUserAccounts(
 export async function getDefaultAccount(
   db: D1Database,
   env: { ENCRYPTION_KEY?: string },
-  userId: number
+  userId: number,
 ): Promise<(CloudflareAccount & { api_token: string }) | null> {
   const result = await db
-    .prepare('SELECT * FROM cloudflare_accounts WHERE user_id = ? AND is_default = 1 AND is_active = 1 LIMIT 1')
+    .prepare(
+      "SELECT * FROM cloudflare_accounts WHERE user_id = ? AND is_default = 1 AND is_active = 1 LIMIT 1",
+    )
     .bind(userId)
     .first<CloudflareAccount>();
 
@@ -63,10 +68,12 @@ export async function getDefaultAccount(
 export async function getActiveAccounts(
   db: D1Database,
   env: { ENCRYPTION_KEY?: string },
-  userId: number
+  userId: number,
 ): Promise<{ account: CloudflareAccount; token: string }[]> {
   const result = await db
-    .prepare('SELECT * FROM cloudflare_accounts WHERE user_id = ? AND is_active = 1 ORDER BY is_default DESC, created_at ASC')
+    .prepare(
+      "SELECT * FROM cloudflare_accounts WHERE user_id = ? AND is_active = 1 ORDER BY is_default DESC, created_at ASC",
+    )
     .bind(userId)
     .all<CloudflareAccount>();
 
@@ -91,24 +98,26 @@ export async function createAccount(
   userId: number,
   accountName: string,
   apiToken: string,
-  zoneId?: string
+  zoneId?: string,
 ): Promise<CloudflareAccount> {
   // 验证 API Token
   const isValid = await verifyToken(apiToken);
   if (!isValid) {
-    throw new Error('Cloudflare API Token 无效或已过期');
+    throw new Error("Cloudflare API Token 无效或已过期");
   }
 
   // 加密 API Token
   const encryptedToken = await encryptText(env, apiToken);
   if (!encryptedToken) {
-    throw new Error('加密 API Token 失败');
+    throw new Error("加密 API Token 失败");
   }
 
   // 如果没有提供 zoneId，尝试从第一个域名自动获取
   let finalZoneId = zoneId;
   if (!finalZoneId && env.DOMAINS) {
-    const domains = env.DOMAINS.split(',').map(d => d.trim()).filter(Boolean);
+    const domains = env.DOMAINS.split(",")
+      .map((d) => d.trim())
+      .filter(Boolean);
     if (domains.length > 0) {
       const zoneId = await resolveZoneId(apiToken, domains[0]);
       if (zoneId) {
@@ -119,7 +128,9 @@ export async function createAccount(
 
   // 如果是第一个账户，设为默认
   const countResult = await db
-    .prepare('SELECT COUNT(*) as count FROM cloudflare_accounts WHERE user_id = ?')
+    .prepare(
+      "SELECT COUNT(*) as count FROM cloudflare_accounts WHERE user_id = ?",
+    )
     .bind(userId)
     .first<{ count: number }>();
 
@@ -128,7 +139,9 @@ export async function createAccount(
   // 如果是默认账户，清除其他默认
   if (isDefault) {
     await db
-      .prepare('UPDATE cloudflare_accounts SET is_default = 0 WHERE user_id = ?')
+      .prepare(
+        "UPDATE cloudflare_accounts SET is_default = 0 WHERE user_id = ?",
+      )
       .bind(userId)
       .run();
   }
@@ -136,14 +149,23 @@ export async function createAccount(
   const result = await db
     .prepare(
       `INSERT INTO cloudflare_accounts (user_id, account_name, api_token, zone_id, is_active, is_default)
-       VALUES (?, ?, ?, ?, 1, ?)`
+       VALUES (?, ?, ?, ?, 1, ?)`,
     )
-    .bind(userId, accountName, encryptedToken, finalZoneId ?? null, isDefault ? 1 : 0)
+    .bind(
+      userId,
+      accountName,
+      encryptedToken,
+      finalZoneId ?? null,
+      isDefault ? 1 : 0,
+    )
     .run();
 
   const id = result.meta.last_row_id;
   const account = await getAccountById(db, userId, id as number);
-  if (!account) throw new Error('Failed to create account');
+  if (!account) throw new Error("Failed to create account");
+
+  // write-through：镜像侧新增该账户行（best-effort，失败静默，日级 cron 回补）
+  await mirrorSyncRow(env, "cloudflare_accounts", id as number).catch(() => {});
 
   return account;
 }
@@ -162,25 +184,27 @@ export async function updateAccount(
     zone_id?: string;
     is_active?: boolean;
     is_default?: boolean;
-  }
+  },
 ): Promise<CloudflareAccount> {
   const existing = await getAccountById(db, userId, accountId);
   if (!existing) {
-    throw new Error('账户不存在');
+    throw new Error("账户不存在");
   }
 
   // 如果要更新 API Token，需要验证
   if (updates.api_token) {
     const isValid = await verifyToken(updates.api_token);
     if (!isValid) {
-      throw new Error('Cloudflare API Token 无效或已过期');
+      throw new Error("Cloudflare API Token 无效或已过期");
     }
   }
 
   // 如果要设为默认，清除其他默认
   if (updates.is_default) {
     await db
-      .prepare('UPDATE cloudflare_accounts SET is_default = 0 WHERE user_id = ?')
+      .prepare(
+        "UPDATE cloudflare_accounts SET is_default = 0 WHERE user_id = ?",
+      )
       .bind(userId)
       .run();
   }
@@ -190,31 +214,31 @@ export async function updateAccount(
   const values: any[] = [];
 
   if (updates.account_name !== undefined) {
-    setParts.push('account_name = ?');
+    setParts.push("account_name = ?");
     values.push(updates.account_name);
   }
 
   if (updates.api_token !== undefined) {
     const encrypted = await encryptText(env, updates.api_token);
     if (!encrypted) {
-      throw new Error('加密 API Token 失败');
+      throw new Error("加密 API Token 失败");
     }
-    setParts.push('api_token = ?');
+    setParts.push("api_token = ?");
     values.push(encrypted);
   }
 
   if (updates.zone_id !== undefined) {
-    setParts.push('zone_id = ?');
+    setParts.push("zone_id = ?");
     values.push(updates.zone_id);
   }
 
   if (updates.is_active !== undefined) {
-    setParts.push('is_active = ?');
+    setParts.push("is_active = ?");
     values.push(updates.is_active ? 1 : 0);
   }
 
   if (updates.is_default !== undefined) {
-    setParts.push('is_default = ?');
+    setParts.push("is_default = ?");
     values.push(updates.is_default ? 1 : 0);
   }
 
@@ -227,12 +251,17 @@ export async function updateAccount(
   values.push(userId, accountId);
 
   await db
-    .prepare(`UPDATE cloudflare_accounts SET ${setParts.join(', ')} WHERE user_id = ? AND id = ?`)
+    .prepare(
+      `UPDATE cloudflare_accounts SET ${setParts.join(", ")} WHERE user_id = ? AND id = ?`,
+    )
     .bind(...values)
     .run();
 
   const updated = await getAccountById(db, userId, accountId);
-  if (!updated) throw new Error('Failed to update account');
+  if (!updated) throw new Error("Failed to update account");
+
+  // write-through：镜像侧更新该账户行（best-effort，失败静默，日级 cron 回补）
+  await mirrorSyncRow(env, "cloudflare_accounts", accountId).catch(() => {});
 
   return updated;
 }
@@ -243,28 +272,32 @@ export async function updateAccount(
 export async function deleteAccount(
   db: D1Database,
   userId: number,
-  accountId: number
+  accountId: number,
 ): Promise<void> {
   const account = await getAccountById(db, userId, accountId);
   if (!account) {
-    throw new Error('账户不存在');
+    throw new Error("账户不存在");
   }
 
   await db
-    .prepare('DELETE FROM cloudflare_accounts WHERE user_id = ? AND id = ?')
+    .prepare("DELETE FROM cloudflare_accounts WHERE user_id = ? AND id = ?")
     .bind(userId, accountId)
     .run();
 
   // 如果删除的是默认账户，将第一个活跃账户设为默认
   if (account.is_default) {
     const firstActive = await db
-      .prepare('SELECT id FROM cloudflare_accounts WHERE user_id = ? AND is_active = 1 LIMIT 1')
+      .prepare(
+        "SELECT id FROM cloudflare_accounts WHERE user_id = ? AND is_active = 1 LIMIT 1",
+      )
       .bind(userId)
       .first<{ id: number }>();
 
     if (firstActive) {
       await db
-        .prepare('UPDATE cloudflare_accounts SET is_default = 1 WHERE user_id = ? AND id = ?')
+        .prepare(
+          "UPDATE cloudflare_accounts SET is_default = 1 WHERE user_id = ? AND id = ?",
+        )
         .bind(userId, firstActive.id)
         .run();
     }
@@ -277,10 +310,10 @@ export async function deleteAccount(
 export async function getAccountById(
   db: D1Database,
   userId: number,
-  accountId: number
+  accountId: number,
 ): Promise<CloudflareAccount | null> {
   return db
-    .prepare('SELECT * FROM cloudflare_accounts WHERE user_id = ? AND id = ?')
+    .prepare("SELECT * FROM cloudflare_accounts WHERE user_id = ? AND id = ?")
     .bind(userId, accountId)
     .first<CloudflareAccount>();
 }
@@ -290,10 +323,14 @@ export async function getAccountById(
  */
 export async function decryptToken(
   env: { ENCRYPTION_KEY?: string },
-  account: CloudflareAccount
+  account: CloudflareAccount,
 ): Promise<string | null> {
   // 先检查是否已经是明文（兼容旧数据）
-  if (!account.api_token.startsWith('{') && !account.api_token.includes('+') && !account.api_token.includes('/')) {
+  if (
+    !account.api_token.startsWith("{") &&
+    !account.api_token.includes("+") &&
+    !account.api_token.includes("/")
+  ) {
     return account.api_token;
   }
 
@@ -303,16 +340,19 @@ export async function decryptToken(
 /**
  * 解析 Zone ID
  */
-async function resolveZoneId(apiToken: string, domain: string): Promise<string | null> {
+async function resolveZoneId(
+  apiToken: string,
+  domain: string,
+): Promise<string | null> {
   try {
     const response = await fetch(
       `https://api.cloudflare.com/client/v4/zones?name=${encodeURIComponent(domain)}&status=active`,
       {
         headers: {
           Authorization: `Bearer ${apiToken}`,
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
-      }
+      },
     );
 
     const data = (await response.json()) as {
@@ -337,12 +377,16 @@ async function resolveZoneId(apiToken: string, domain: string): Promise<string |
  */
 export async function resolveZoneIdAndTokenFromAccounts(
   accounts: { account: CloudflareAccount; token: string }[],
-  domain: string
+  domain: string,
 ): Promise<{ zoneId: string; token: string } | null> {
   // 优先从账户缓存的 zone_id 匹配
   for (const { account, token } of accounts) {
-    if (account.zone_id && account.zone_id.trim() !== '') {
-      const matched = await verifyZoneIdForDomain(token, account.zone_id, domain);
+    if (account.zone_id && account.zone_id.trim() !== "") {
+      const matched = await verifyZoneIdForDomain(
+        token,
+        account.zone_id,
+        domain,
+      );
       if (matched) {
         return { zoneId: account.zone_id, token };
       }
@@ -363,16 +407,20 @@ export async function resolveZoneIdAndTokenFromAccounts(
 /**
  * 验证 Zone ID 是否属于指定域名
  */
-async function verifyZoneIdForDomain(apiToken: string, zoneId: string, domain: string): Promise<boolean> {
+async function verifyZoneIdForDomain(
+  apiToken: string,
+  zoneId: string,
+  domain: string,
+): Promise<boolean> {
   try {
     const response = await fetch(
       `https://api.cloudflare.com/client/v4/zones/${zoneId}`,
       {
         headers: {
           Authorization: `Bearer ${apiToken}`,
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
-      }
+      },
     );
 
     const data = (await response.json()) as {
@@ -399,7 +447,7 @@ export async function createDnsRecordWithAccount(
     ttl?: number;
     priority?: number;
     proxied?: boolean;
-  }
+  },
 ) {
   return cfCreateDnsRecord(apiToken, zoneId, record);
 }
@@ -418,7 +466,7 @@ export async function updateDnsRecordWithAccount(
     ttl?: number;
     priority?: number;
     proxied?: boolean;
-  }
+  },
 ) {
   return cfUpdateDnsRecord(apiToken, zoneId, recordId, record);
 }
@@ -429,7 +477,7 @@ export async function updateDnsRecordWithAccount(
 export async function deleteDnsRecordWithAccount(
   apiToken: string,
   zoneId: string,
-  recordId: string
+  recordId: string,
 ) {
   return cfDeleteDnsRecord(apiToken, zoneId, recordId);
 }

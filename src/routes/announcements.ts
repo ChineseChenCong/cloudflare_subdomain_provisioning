@@ -8,6 +8,7 @@ import {
   updateAnnouncement,
   deleteAnnouncement,
 } from '../db/queries';
+import { mirrorSyncRow } from '../services/mirror';
 
 type Variables = { user: User };
 
@@ -16,7 +17,7 @@ const announcements = new Hono<{ Bindings: Env; Variables: Variables }>();
 // 公开：获取启用中的公告（无需登录）
 announcements.get('/', async (c) => {
   try {
-    const list = await getActiveAnnouncements(c.env.DB);
+    const list = await getActiveAnnouncements(c.env);
     return c.json({ announcements: list });
   } catch (err: any) {
     return c.json({ error: `获取公告失败: ${err.message}` }, 500);
@@ -30,7 +31,7 @@ admin.use('/*', authMiddleware, adminMiddleware);
 
 // 获取全部公告
 admin.get('/', async (c) => {
-  const list = await getAllAnnouncements(c.env.DB);
+  const list = await getAllAnnouncements(c.env);
   return c.json({ announcements: list });
 });
 
@@ -52,7 +53,7 @@ admin.post('/', async (c) => {
   }
 
   const created = await createAnnouncement(
-    c.env.DB,
+    c.env,
     body.title.trim(),
     body.content.trim(),
     user.id,
@@ -64,6 +65,9 @@ admin.post('/', async (c) => {
     return c.json({ error: '创建公告失败' }, 500);
   }
 
+  // write-through：镜像侧同步新增公告（best-effort，失败静默，日级 cron 回补）
+  await mirrorSyncRow(c.env, 'announcements', created.id).catch(() => {});
+
   return c.json({ success: true, announcement: created });
 });
 
@@ -74,7 +78,7 @@ admin.put('/:id', async (c) => {
     .json<{ title?: string; content?: string; is_active?: boolean; is_pinned?: boolean; sort_order?: number }>()
     .catch(() => ({ title: undefined, content: undefined, is_active: undefined, is_pinned: undefined, sort_order: undefined }));
 
-  const updated = await updateAnnouncement(c.env.DB, id, {
+  const updated = await updateAnnouncement(c.env, id, {
     title: body.title !== undefined ? body.title.trim() : undefined,
     content: body.content !== undefined ? body.content.trim() : undefined,
     is_active: body.is_active,
@@ -86,13 +90,19 @@ admin.put('/:id', async (c) => {
     return c.json({ error: '公告不存在或未更新' }, 404);
   }
 
+  // write-through：镜像侧同步更新公告（best-effort，失败静默，日级 cron 回补）
+  await mirrorSyncRow(c.env, 'announcements', id).catch(() => {});
+
   return c.json({ success: true, announcement: updated });
 });
 
 // 删除公告
 admin.delete('/:id', async (c) => {
   const id = parseInt(c.req.param('id'), 10);
-  await deleteAnnouncement(c.env.DB, id);
+  await deleteAnnouncement(c.env, id);
+  // write-through：镜像侧删除该公告行（best-effort，失败静默，日级 cron 回补）
+  await mirrorSyncRow(c.env, 'announcements', id).catch(() => {});
+
   return c.json({ success: true });
 });
 

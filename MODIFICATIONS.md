@@ -275,6 +275,46 @@
   `init()` 增加独立 try/catch 加载，不破坏既有“加载失败也必达渲染”的兜底。
 验证：`npx tsc --noEmit` 通过。
 
+### 16. D1 → 镜像后端自动同步（Scheduled / cron，2026-09-15 本轮）
+此前把 D1 数据灌入 MySQL / 自定义 SQLite 需维护者手跑
+`npm run db:export` + `turso db shell` / `mysql -h … < snapshot.sql`。本轮改为
+**Worker 内置定时自动同步**，无需手动执行：
+- `src/services/sync.ts`（新增）：从 D1 读取全部业务表（0001–0007 共 11 张）快照，
+  逐表对启用且已配置的镜像后端（`DB_QUERY_ORDER` 中的 `mysql` / `custom-sqlite`）做
+  全表替换（DELETE + 重灌）；表级 try/catch、单表失败不影响其余；任一张表 D1 读取失败
+  则本次同步中止（避免半桶镜像）。纯只读消费 D1、写仅作用于镜像，绝不反向回写 D1。
+- `src/db/provider.ts`（新增）：`sqliteExec`（libsql HTTP 批量写）/ `mysqlExec`
+  （Hyperdrive `?` 占位写）。
+- `src/index.ts`：Worker 导出改为标准 `{ fetch, scheduled }`，`scheduled` 调用
+  `syncD1ToMirrors(env)`（cron）——幂等、离线于请求路径，不耗每次请求的 D1 额度。
+- `wrangler.toml`：新增 `[triggers] crons = ["0 0 * * *"]`（每天一次，UTC 0 点），
+  及注释待启用 `[[hyperdrive]]` 绑定模板。频率定为日级：镜像新鲜度由「写时增量推」
+  (write-through，见 STORAGE.md) 维持，此 cron 仅作全量自愈/冷对齐，不承担实时职责。
+设计约束：未配置任何镜像（纯 D1 缺省）时同步为 no-op，线上行为与现状完全一致；
+新增/删除表需同步更新 `sync.ts` 的 `SYNC_TABLES` 常量。
+验证：`npx tsc --noEmit` 与 `npx wrangler deploy --dry-run`（437.77 KiB / gzip 94.18 KiB）通过。
+
+### 17. 写时增量推镜像（write-through，2026-09-15 本轮）
+此前镜像的新鲜度依赖每日全量 cron；本次改为**每次 D1 写提交后立即增量推该行到镜像**，
+实现「没写入 → 读只走镜像、不碰 D1；一有写入 → 该行立即同步；回退才回 D1」的目标。
+- `src/services/mirror.ts`（新增）：`mirrorSyncRow(env, table, keyVal)` 对单行做
+  **reconcile**（D1 回读该行权威数据 → 镜像 DELETE 旧行 + INSERT 新行；D1 无该行则
+  DELETE 清残留）。**best-effort**：任一镜像失败只记 `[audit]`，绝不抛出、绝不阻塞写、
+  绝不反向回写 D1。复合主键表（`email_send_log` 的 `user_id+send_date`）不适用单行推，
+  由日级 cron 全量对齐。
+- 写入口接线（覆盖 api.ts / owner-approval.ts / announcements.ts / proxied.ts /
+  cloudflare-accounts.ts）：`subdomains`（创建/删除/审核）、`dns_records`（新建/更新/删除）、
+  `owner_approvals`（创建/同意/驳回/过期）、`announcements`（增/改/删）、
+  `cloudflare_accounts`（创建/更新）。删除类写点若拿不到 env（如 accounts delete）
+  靠日级 cron 对齐，不影响安全。
+- 一致性模型：D1 为唯一写主与权威；镜像为可降级副本；未覆盖/漏推/半成功由
+  `syncD1ToMirrors` 每日全量自愈兜底，最终一致、无数据丢失。
+- 触发条件：与用户请求路径绑定（每次写 handler 执行后），不再依赖高频定时；
+  `wrangler.toml [triggers] crons = ["0 0 * * *"]` 仅作全量自愈/冷对齐。
+- 验证：`npx tsc --noEmit` 与 `npx wrangler deploy --dry-run`（441.68 KiB / gzip 94.99 KiB）通过。
+- 注意：`queries.ts` 的读回退链尚未接线，当前读仍全走 D1；`DB_QUERY_ORDER` 在读接线完成前
+  不影响读路径。写时增量推已独立生效，与读回退链无依赖关系。
+
 ---
 
 ## 四、合规义务履行声明

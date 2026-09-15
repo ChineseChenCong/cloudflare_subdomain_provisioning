@@ -101,3 +101,48 @@
 - `provider.ts`（选路+健康探测+sqlite/mysql 客户端+S3 SigV4 快照）**已落地且默认关闭**（`DB_QUERY_ORDER` 缺省 `d1` = 现状等价）。
 - **仍未做**：把 `queries.ts` 的 DB 入口**逐查询**统一走 provider 读回退链（生产接线）。此接线为独立 commit，
   需 `tsc --noEmit` + `wrangler deploy --dry-run` 通过后再上线。
+
+---
+
+## 增补：D1 → 镜像自动同步（Scheduled / cron，2026-09-15）
+
+> 手跑 `npm run db:export` + 灌 Turso/MySQL 的**首次种子导入已可选**——现由
+> Worker 内置定时同步自动维持镜像，无需手动执行（可手动种子导入后再接自动同步，二者不冲突）。
+
+- `src/services/sync.ts`：`syncD1ToMirrors(env)` 从 D1 读全表（0001–0007 共 11 张，
+  `SYNC_TABLES` 常量），逐表对 `DB_QUERY_ORDER` 中启用且已配置的 `mysql` / `custom-sqlite`
+  做全表替换（DELETE + 重灌）；表级 try/catch，任一表 D1 读失败则本次中止（防半桶镜像）。
+- 触发：`wrangler.toml [triggers] crons = ["0 0 * * *"]`（每天一次，UTC 0 点 =
+  北京时间 8:00），`src/index.ts` Worker 导出为标准 `{ fetch, scheduled }`。
+  频率已定为日级：镜像的新鲜度由「写时增量推」(write-through) 负责，此 cron
+  仅作全量自愈/冷对齐兜底，不承担实时新鲜度。
+- 写能力：`provider.ts` 新增 `sqliteExec`（libsql HTTP 批量写）/ `mysqlExec`（Hyperdrive `?` 占位写）。
+- no-op 约束：纯 D1（未配置镜像）时同步为空操作，线上行为与现状完全一致。
+  新增/删除表须同步更新 `sync.ts` 的 `SYNC_TABLES`（与 migration 对齐）。
+- 验证：`npx tsc --noEmit` 与 `npx wrangler deploy --dry-run`（437.77 KiB / gzip 94.18 KiB）通过。
+- 注意（部署）：cron 在 `wrangler deploy` 时注册到 Worker；改 `[triggers]` 后需重新部署生效。
+  首次部署 cron 后即可在 Worker 仪表盘 → Triggers 看到该计划。
+
+---
+
+## 增补：写时增量推镜像（write-through，2026-09-15）
+
+> 目标：`没写入 → 读只走镜像、不碰 D1；一有写入 → 立即把该行增量拉到镜像，
+> 读回退才回 D1`。D1 始终为唯一写主与回退源。
+
+- `src/services/mirror.ts`：`mirrorSyncRow(env, table, keyVal)` 做单行 reconcile
+  （D1 回读该行权威数据 → 镜像 DELETE 旧行 + INSERT 新行；D1 无该行则 DELETE 清残留）。
+  **best-effort**：任一镜像失败只记 `[audit]`，绝不抛出、绝不阻塞写、绝不反向回写 D1。
+  复合主键表（如 `email_send_log` 的 `user_id+send_date`）不适用单行推，由日级 cron 对齐。
+- 写入口接线（已覆盖）：`subdomains`（创建/删除/审核）、`dns_records`（新建/更新/删除）、
+  `owner_approvals`（创建/同意/驳回/过期）、`announcements`（增/改/删）、
+  `cloudflare_accounts`（创建/更新）。删除类写点若拿不到 env（如 accounts delete）
+  靠日级 cron 对齐，不影响安全。
+- 触发条件：与用户请求路径绑定（每次写 handler 执行后），不再依赖高频定时；
+  `wrangler.toml [triggers] crons = ["0 0 * * *"]` 仅作全量自愈/冷对齐兜底。
+  空闲（无写入）时镜像不消耗 D1 读额度；有写入时才多 1 次 D1 SELECT（该行）+ 镜像写。
+- 一致性：D1 为唯一写主与权威；镜像为可降级副本；漏推/半成功由每日全量
+  `syncD1ToMirrors` 自愈，最终一致、无数据丢失。
+- 仍未做（pending，独立 commit）：`queries.ts` 的**读回退链**未接线，当前读仍全走 D1；
+  `DB_QUERY_ORDER` 在读接线完成前不影响读路径。写时增量推已独立生效，与读回退链无依赖。
+- 验证：`npx tsc --noEmit` 与 `npx wrangler deploy --dry-run`（441.68 KiB / gzip 94.99 KiB）通过。

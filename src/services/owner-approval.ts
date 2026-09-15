@@ -3,20 +3,18 @@
 //   1) 邮件「同意/驳回」链接 → index.ts GET /decide-approval
 //   2) 普通用户前端审批面板 → api.ts POST /owner-approvals/:id/{approve,reject}
 // 统一处理：超时自动驳回(expired)、驳回(rejected)、同意(approved，创建子域名并置为已批准)。
-import type { Env, OwnerApproval } from '../types';
+import type { Env, OwnerApproval } from "../types";
 import {
   setOwnerApprovalStatus,
   findSubdomain,
   createSubdomain,
   approveSubdomain,
   findUserById,
-} from '../db/queries';
-import {
-  sendEmail,
-  buildOwnerApprovalResultEmail,
-} from './email';
+} from "../db/queries";
+import { sendEmail, buildOwnerApprovalResultEmail } from "./email";
+import { mirrorSyncRow } from "./mirror";
 
-export type OwnerApprovalAction = 'approve' | 'reject';
+export type OwnerApprovalAction = "approve" | "reject";
 
 /** 是否已超时（超过 deadline_at 仍未处理的 pending 请求） */
 export function isOwnerApprovalExpired(a: OwnerApproval): boolean {
@@ -24,24 +22,32 @@ export function isOwnerApprovalExpired(a: OwnerApproval): boolean {
 }
 
 /** 拆分目标 FQDN 得到 注册域名(baseDomain) 与 目标子域前缀(targetSub)，与开通流程一致 */
-export function splitOwnerApprovalTarget(a: OwnerApproval): { baseDomain: string; targetSub: string } {
-  const baseDomain = a.base_fqdn.slice(a.base_fqdn.indexOf('.') + 1);
+export function splitOwnerApprovalTarget(a: OwnerApproval): {
+  baseDomain: string;
+  targetSub: string;
+} {
+  const baseDomain = a.base_fqdn.slice(a.base_fqdn.indexOf(".") + 1);
   const targetSub = a.target_fqdn.slice(0, a.target_fqdn.indexOf(baseDomain));
-  return { baseDomain, targetSub: targetSub.replace(/\.$/, '') };
+  return { baseDomain, targetSub: targetSub.replace(/\.$/, "") };
 }
 
 /** 通知申请人最终结果（同意/驳回/超时） */
 async function notifyApplicant(
   env: Env,
   a: OwnerApproval,
-  result: 'approved' | 'rejected' | 'expired',
-  siteUrl: string
+  result: "approved" | "rejected" | "expired",
+  siteUrl: string,
 ): Promise<void> {
-  const applicant = await findUserById(env.DB, a.applicant_user_id);
+  const applicant = await findUserById(env, a.applicant_user_id);
   if (!applicant || !applicant.email) return;
-  const siteName = env.SITE_NAME || 'SubDomain Hub';
+  const siteName = env.SITE_NAME || "SubDomain Hub";
   const mail = buildOwnerApprovalResultEmail(
-    applicant.github_username, a.target_fqdn, a.base_fqdn, result, siteName, siteUrl
+    applicant.github_username,
+    a.target_fqdn,
+    a.base_fqdn,
+    result,
+    siteName,
+    siteUrl,
   );
   mail.to = applicant.email;
   await sendEmail(env, mail).catch(() => {});
@@ -51,18 +57,27 @@ async function notifyApplicant(
 export async function expireOwnerApproval(
   env: Env,
   a: OwnerApproval,
-  siteUrl: string
+  siteUrl: string,
 ): Promise<boolean> {
-  if ((a.status as string) !== 'pending' || !isOwnerApprovalExpired(a)) return false;
-  await setOwnerApprovalStatus(env.DB, a.id, 'expired');
-  await notifyApplicant(env, a, 'expired', siteUrl);
+  if ((a.status as string) !== "pending" || !isOwnerApprovalExpired(a))
+    return false;
+  await setOwnerApprovalStatus(env, a.id, "expired");
+  // write-through：镜像侧同步该审批行（best-effort，失败静默，日级 cron 回补）
+  await mirrorSyncRow(env, "owner_approvals", a.id).catch(() => {});
+  await notifyApplicant(env, a, "expired", siteUrl);
   return true;
 }
 
 /** 驳回申请 */
-export async function rejectOwnerApproval(env: Env, a: OwnerApproval, siteUrl: string): Promise<void> {
-  await setOwnerApprovalStatus(env.DB, a.id, 'rejected');
-  await notifyApplicant(env, a, 'rejected', siteUrl);
+export async function rejectOwnerApproval(
+  env: Env,
+  a: OwnerApproval,
+  siteUrl: string,
+): Promise<void> {
+  await setOwnerApprovalStatus(env, a.id, "rejected");
+  // write-through：镜像侧同步该审批行（best-effort，失败静默，日级 cron 回补）
+  await mirrorSyncRow(env, "owner_approvals", a.id).catch(() => {});
+  await notifyApplicant(env, a, "rejected", siteUrl);
 }
 
 /**
@@ -72,18 +87,28 @@ export async function rejectOwnerApproval(env: Env, a: OwnerApproval, siteUrl: s
 export async function approveOwnerApproval(
   env: Env,
   a: OwnerApproval,
-  siteUrl: string
+  siteUrl: string,
 ): Promise<{ dupe: boolean }> {
   const { baseDomain, targetSub } = splitOwnerApprovalTarget(a);
-  const exists = await findSubdomain(env.DB, targetSub, baseDomain);
+  const exists = await findSubdomain(env, targetSub, baseDomain);
   if (exists) {
-    await setOwnerApprovalStatus(env.DB, a.id, 'approved');
-    await notifyApplicant(env, a, 'approved', siteUrl);
+    await setOwnerApprovalStatus(env, a.id, "approved");
+    // write-through：镜像侧同步该审批行（best-effort，失败静默，日级 cron 回补）
+    await mirrorSyncRow(env, "owner_approvals", a.id).catch(() => {});
+    await notifyApplicant(env, a, "approved", siteUrl);
     return { dupe: true };
   }
-  const created = await createSubdomain(env.DB, a.applicant_user_id, targetSub, baseDomain);
-  await approveSubdomain(env.DB, created.id, a.approver_user_id);
-  await setOwnerApprovalStatus(env.DB, a.id, 'approved');
-  await notifyApplicant(env, a, 'approved', siteUrl);
+  const created = await createSubdomain(
+    env,
+    a.applicant_user_id,
+    targetSub,
+    baseDomain,
+  );
+  await approveSubdomain(env, created.id, a.approver_user_id);
+  await setOwnerApprovalStatus(env, a.id, "approved");
+  // write-through：镜像侧同步新建/更新行（best-effort，失败静默，日级 cron 回补）
+  await mirrorSyncRow(env, "subdomains", created.id).catch(() => {});
+  await mirrorSyncRow(env, "owner_approvals", a.id).catch(() => {});
+  await notifyApplicant(env, a, "approved", siteUrl);
   return { dupe: false };
 }

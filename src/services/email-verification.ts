@@ -1,26 +1,27 @@
-import type { Env, EmailVerification } from '../types';
-import { generateToken } from './crypto';
-import { sendEmail } from './email';
+import type { Env, EmailVerification } from "../types";
+import { generateToken } from "./crypto";
+import { sendEmail } from "./email";
+import { mirrorSyncRow } from "./mirror";
 
 /**
  * 检查邮箱域名是否在白名单中
  */
 export function isEmailDomainAllowed(env: Env, email: string): boolean {
   const whitelist = env.ALLOWED_EMAIL_DOMAINS;
-  if (!whitelist || whitelist.trim() === '') {
+  if (!whitelist || whitelist.trim() === "") {
     return true; // 未配置白名单，允许所有
   }
 
   const allowedDomains = whitelist
-    .split(',')
-    .map(d => d.trim().toLowerCase())
+    .split(",")
+    .map((d) => d.trim().toLowerCase())
     .filter(Boolean);
 
   if (allowedDomains.length === 0) {
     return true;
   }
 
-  const domain = email.split('@')[1]?.toLowerCase();
+  const domain = email.split("@")[1]?.toLowerCase();
   if (!domain) {
     return false;
   }
@@ -33,13 +34,13 @@ export function isEmailDomainAllowed(env: Env, email: string): boolean {
  */
 export function getAllowedEmailDomains(env: Env): string[] {
   const whitelist = env.ALLOWED_EMAIL_DOMAINS;
-  if (!whitelist || whitelist.trim() === '') {
+  if (!whitelist || whitelist.trim() === "") {
     return [];
   }
 
   return whitelist
-    .split(',')
-    .map(d => d.trim().toLowerCase())
+    .split(",")
+    .map((d) => d.trim().toLowerCase())
     .filter(Boolean);
 }
 
@@ -47,7 +48,10 @@ export function getAllowedEmailDomains(env: Env): string[] {
  * 检查是否需要邮箱验证
  */
 export function isEmailVerificationRequired(env: Env): boolean {
-  return env.EMAIL_VERIFICATION_REQUIRED === 'true' || env.EMAIL_VERIFICATION_REQUIRED === '1';
+  return (
+    env.EMAIL_VERIFICATION_REQUIRED === "true" ||
+    env.EMAIL_VERIFICATION_REQUIRED === "1"
+  );
 }
 
 /**
@@ -56,11 +60,13 @@ export function isEmailVerificationRequired(env: Env): boolean {
 export async function createEmailVerification(
   db: D1Database,
   userId: number,
-  email: string
+  email: string,
 ): Promise<EmailVerification> {
   // 删除旧的验证记录
   await db
-    .prepare('DELETE FROM user_email_verifications WHERE user_id = ? AND email = ?')
+    .prepare(
+      "DELETE FROM user_email_verifications WHERE user_id = ? AND email = ?",
+    )
     .bind(userId, email)
     .run();
 
@@ -70,7 +76,7 @@ export async function createEmailVerification(
   const result = await db
     .prepare(
       `INSERT INTO user_email_verifications (user_id, email, verification_token, is_verified, created_at)
-       VALUES (?, ?, ?, 0, ?)`
+       VALUES (?, ?, ?, 0, ?)`,
     )
     .bind(userId, email, token, now)
     .run();
@@ -92,11 +98,12 @@ export async function createEmailVerification(
  * 验证邮箱
  */
 export async function verifyEmailByToken(
-  db: D1Database,
-  token: string
+  env: Env,
+  token: string,
 ): Promise<{ success: boolean; user_id: number; email: string } | null> {
-  const verification = await db
-    .prepare('SELECT * FROM user_email_verifications WHERE verification_token = ? AND is_verified = 0')
+  const verification = await env.DB.prepare(
+    "SELECT * FROM user_email_verifications WHERE verification_token = ? AND is_verified = 0",
+  )
     .bind(token)
     .first<EmailVerification>();
 
@@ -112,23 +119,23 @@ export async function verifyEmailByToken(
   }
 
   // 更新验证状态
-  await db
-    .prepare(
-      `UPDATE user_email_verifications
+  await env.DB.prepare(
+    `UPDATE user_email_verifications
        SET is_verified = 1, verified_at = datetime('now')
-       WHERE id = ?`
-    )
+       WHERE id = ?`,
+  )
     .bind(verification.id)
     .run();
 
   // 更新用户邮箱验证状态
-  await db
-    .prepare(
-      `UPDATE users SET email_verified = 1, email = ?, updated_at = datetime('now')
-       WHERE id = ?`
-    )
+  await env.DB.prepare(
+    `UPDATE users SET email_verified = 1, email = ?, updated_at = datetime('now')
+       WHERE id = ?`,
+  )
     .bind(verification.email, verification.user_id)
     .run();
+  await mirrorSyncRow(env, "user_email_verifications", verification.id).catch(() => {});
+  await mirrorSyncRow(env, "users", verification.user_id).catch(() => {});
 
   return {
     success: true,
@@ -142,10 +149,10 @@ export async function verifyEmailByToken(
  */
 export async function getEmailVerificationStatus(
   db: D1Database,
-  userId: number
+  userId: number,
 ): Promise<{ email: string | null; is_verified: boolean } | null> {
   const user = await db
-    .prepare('SELECT email, email_verified FROM users WHERE id = ?')
+    .prepare("SELECT email, email_verified FROM users WHERE id = ?")
     .bind(userId)
     .first<{ email: string | null; email_verified: number }>();
 
@@ -167,7 +174,7 @@ export async function sendVerificationEmail(
   email: string,
   token: string,
   siteName: string,
-  siteUrl: string
+  siteUrl: string,
 ): Promise<boolean> {
   const verificationUrl = `${siteUrl}/verify-email?token=${token}`;
 
@@ -222,12 +229,18 @@ export async function resendVerificationEmail(
   userId: number,
   email: string,
   siteName: string,
-  siteUrl: string
+  siteUrl: string,
 ): Promise<boolean> {
   // 创建新的验证记录
   const verification = await createEmailVerification(db, userId, email);
 
-  return sendVerificationEmail(env, email, verification.verification_token, siteName, siteUrl);
+  return sendVerificationEmail(
+    env,
+    email,
+    verification.verification_token,
+    siteName,
+    siteUrl,
+  );
 }
 
 /**
@@ -238,15 +251,19 @@ export async function resendVerificationEmail(
 export async function checkEmailSendQuota(
   env: Env,
   db: D1Database,
-  userId: number
+  userId: number,
 ): Promise<{ ok: boolean; remaining: number }> {
-  const limit = parseInt(env.EMAIL_DAILY_EMAIL_LIMIT || '5', 10) || 5;
+  const limit = parseInt(env.EMAIL_DAILY_EMAIL_LIMIT || "5", 10) || 5;
 
   // Asia/Shanghai 日期（UTC+8）
-  const date = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const date = new Date(Date.now() + 8 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
 
   const row = await db
-    .prepare('SELECT count FROM email_send_log WHERE user_id = ? AND send_date = ?')
+    .prepare(
+      "SELECT count FROM email_send_log WHERE user_id = ? AND send_date = ?",
+    )
     .bind(userId, date)
     .first<{ count: number }>();
 
@@ -258,10 +275,13 @@ export async function checkEmailSendQuota(
   await db
     .prepare(
       `INSERT INTO email_send_log (user_id, send_date, count) VALUES (?, ?, 1)
-       ON CONFLICT(user_id, send_date) DO UPDATE SET count = count + 1, updated_at = datetime('now')`
+       ON CONFLICT(user_id, send_date) DO UPDATE SET count = count + 1, updated_at = datetime('now')`,
     )
     .bind(userId, date)
     .run();
+
+  // write-through：镜像侧同步该邮件配额行（复合主键 user_id+send_date，best-effort，失败静默，日级 cron 回补）
+  await mirrorSyncRow(env, "email_send_log", [userId, date]).catch(() => {});
 
   return { ok: true, remaining: limit - cur - 1 };
 }

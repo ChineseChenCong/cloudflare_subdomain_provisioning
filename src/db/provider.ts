@@ -288,3 +288,51 @@ export async function exportD1Snapshot(env: Env): Promise<string | null> {
   }
   return JSON.stringify({ exported_at: new Date().toISOString(), tables: out });
 }
+
+/**
+ * libsql HTTP 批量写执行（镜像同步写入用）。
+ * 与 sqliteSelect 同一 HTTP 端点，POST `{"statements":[...]}`，每项 `{sql, args}`。
+ * 成功（HTTP 2xx）返回 true；未配置/失败返回 false。
+ */
+export async function sqliteExec(
+  env: Env,
+  statements: { sql: string; args?: unknown[] }[]
+): Promise<boolean> {
+  if (!isCustomSqliteConfigured(env) || statements.length === 0) return false;
+  const url = env.CUSTOM_SQLITE_URL!.trim();
+  const token = env.CUSTOM_SQLITE_TOKEN || env.CUSTOM_SQLITE_JWT || '';
+  try {
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        ...(token ? { authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ statements }),
+    });
+    return resp.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * MySQL（Hyperdrive）写执行（镜像同步写入用）。`?` 位置占位，arg 数组。
+ * 失败/未配置返回 false；默认单条（无事务）。
+ */
+export async function mysqlExec(env: Env, sql: string, args: unknown[] = []): Promise<boolean> {
+  if (!isMysqlConfigured(env)) return false;
+  try {
+    const spec = 'mysql2/promise'; // 非字面量 → 不做静态解析，缺失不阻塞 tsc
+    const mysql2: any = await (import(spec as string));
+    const conn = await mysql2.createConnection(env.HYPERDRIVE!.connectionString);
+    try {
+      await conn.query(sql, args);
+      return true;
+    } finally {
+      await conn.end().catch(() => {});
+    }
+  } catch {
+    return false;
+  }
+}

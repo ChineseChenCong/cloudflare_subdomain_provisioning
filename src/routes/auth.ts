@@ -5,6 +5,7 @@ import { getGitHubAuthUrl, exchangeCodeForToken, getGitHubUser } from '../servic
 import { upsertUser } from '../db/queries';
 import { signJwt } from '../middleware/auth';
 import { getAdminUsers, isEmailVerificationRequired, getAllowedEmailDomains } from '../config';
+import { mirrorSyncRow } from '../services/mirror';
 
 type Variables = { user: User };
 
@@ -78,13 +79,16 @@ auth.get('/github/callback', async (c) => {
 
     // 创建或更新用户
     const user = await upsertUser(
-      c.env.DB,
+      c.env,
       ghUser.id,
       ghUser.login,
       ghUser.avatar_url,
       ghUser.email,
       isAdmin
     );
+
+    // write-through：镜像侧同步该用户行（best-effort，失败静默，日级 cron 回补）
+    await mirrorSyncRow(c.env, 'users', user.id).catch(() => {});
 
     // 检查是否需要邮箱验证
     const verificationRequired = isEmailVerificationRequired(c.env);

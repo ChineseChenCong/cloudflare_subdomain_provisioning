@@ -17,7 +17,7 @@ database_id = "c888cdd9-b2f8-4501-92ab-5d3872406f1e"
 # 本地调试请用 .dev.vars（已被 .gitignore 忽略，不会进 GitHub）。
 
 ADMIN_CONTACT_EMAIL = "admin@mail.rol.moe"
-ALLOWED_EMAIL_DOMAINS = "mail.rol.moe,rol.moe,mail.kivotos.edu.kg,kivotos.edu.kg"
+ALLOWED_EMAIL_DOMAINS = "mail.rol.moe,rol.moe,mail.kivotos.edu.kg,kivotos.edu.kg,gmail.com,qq.com"
 BANNED_PREFIXES = "www,ns1,ns2,ns,mc,mail,video,tcp,udp,tls,smtp,pop,pop3,imap,ftp,enterpriseenrollment,admin,api,cdn,dev,staging,test,beta,alpha,demo,status,blog,shop,store,app,dashboard,panel,portal,secure,vpn,proxy,relay,mx,mx1,mx2,autoconfig,autodiscover,_dmarc,_domainkey,cpanel,webmail,webdisk,cpcalendars,cpcontacts,ww,ww1,ww2,ww3,dns,dash,gov,edu,ac,pb,voip,abydoss,drs,bg5drs,cc,ddns,icp,365,ts,teamspeak,url,dwz,web,webs,ddos,dos,user,localhost,docs,support,help,about,faq,m,mobile,root,server,host,default,postmaster,hostmaster,webmaster,abuse,info,noreply,download,static,img,assets,media,service,services,gateway,primary,secondary,dns1,dns2,external,webhook"
 DOMAINS = "rol.moe,kivotos.edu.kg"
 EMAIL_VERIFICATION_REQUIRED = "true"
@@ -56,3 +56,21 @@ persist = true
 enabled = true
 head_sampling_rate = 1
 persist = true
+# ===================== 定时自动同步（cron） =====================
+# 低频触发 D1 → 镜像后端（MySQL via Hyperdrive / 自定义 SQLite）自动同步（src/services/sync.ts）。
+# 仅当你配置了镜像才生效；纯 D1（缺省）时处理器为 no-op，线上行为不变。
+# 频率：每天一次（协调世界时 UTC 0 点整，即北京时间 8:00）。如需调整改这里再部署即可。
+# 说明：镜像的新鲜度优先靠「写时增量推」(write-through，见 STORAGE.md)；此 cron 仅作
+# 全量自愈网/冷对齐，不再承担“实时新鲜”职责，故不需要高频。
+[triggers]
+crons = ["0 0 * * *"]
+
+# ===================== MySQL（Hyperdrive）绑定（可选，待用户提供→启用） =====================
+# Worker 无法原生连 TCP，MySQL 必须经 Cloudflare Hyperdrive。启用步骤见 STORAGE.md：
+#   1) Dashboard 创建 Hyperdrive（指向你的 MySQL），拿到 connectionString（加密 Secret，不入本文件）
+#   2) 取消下面 `[[hyperdrive]]` 注释，填 name=HYPERDRIVE
+#   3) DB_QUERY_ORDER（[vars] 中）设为 "mysql,custom-sqlite,d1"
+#   4) `npm i mysql2`
+# [[hyperdrive]]
+# binding = "HYPERDRIVE"
+# id = "<你的 Hyperdrive ID>"

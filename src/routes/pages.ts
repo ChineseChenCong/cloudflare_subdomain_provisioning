@@ -1868,11 +1868,18 @@ function renderPage({
     function renderApprovalsPanel() {
       const rq = state.ownerApprovals.requester || [];
       const ap = state.ownerApprovals.approver || [];
-      if (rq.length === 0 && ap.length === 0) return '';
 
+      // 始终渲染该板块（空数据也给提示，让普通用户知道功能存在）；
+      // 有记录时再展开两个子卡片。
       let h = '<div class="section"><div class="section-header">' +
         '<h2 class="section-title">待审批 · 层级子域</h2>' +
         '<span style="font-size:13px;color:var(--text-muted)">' + ap.length + ' 待我处理 · ' + rq.length + ' 我发起的</span></div>';
+
+      if (rq.length === 0 && ap.length === 0) {
+        h += '<div class="card"><p style="color:var(--text-muted);margin:0">暂无审批请求。申请更深一层的子域名时，若其上级已被他人拥有，该申请会出现在这里等待其所有者同意；若您是所有者，他人申请您名下子域的请求也会在此处理。</p></div>';
+        h += '</div>';
+        return h;
+      }
 
       if (ap.length > 0) {
         h += '<div class="card" style="margin-bottom:12px">' +

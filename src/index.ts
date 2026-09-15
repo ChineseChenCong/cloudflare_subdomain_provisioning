@@ -25,6 +25,7 @@ import {
   rejectOwnerApproval,
   expireOwnerApproval,
 } from './services/owner-approval';
+import { syncD1ToMirrors } from './services/sync';
 
 type Variables = { user: User };
 
@@ -132,7 +133,7 @@ app.get('/decide-approval', async (c) => {
   if (!token || (action !== 'approve' && action !== 'reject')) {
     return page('❓', '链接无效', '请从邮件中打开完整链接。');
   }
-  const approval = await getOwnerApprovalByToken(c.env.DB, token);
+  const approval = await getOwnerApprovalByToken(c.env, token);
   if (!approval) {
     return page('❌', '审批请求不存在', '该链接已失效。');
   }
@@ -220,7 +221,7 @@ app.get('/verify-email', async (c) => {
   if (!token) {
     return page('❓', '验证链接缺少令牌', '请从邮件中打开完整链接。');
   }
-  const result = await verifyEmailByToken(c.env.DB, token);
+  const result = await verifyEmailByToken(c.env, token);
   if (!result) {
     return page('❌', '验证链接无效或已过期', '该链接已失效，请重新发送验证邮件。');
   }
@@ -250,4 +251,14 @@ app.onError((err, c) => {
   return c.json({ error: '服务器内部错误' }, 500);
 });
 
-export default app;
+// ==================== Worker 导出（fetch + scheduled） ====================
+// scheduled（cron）定时触发 D1 → 镜像后端（MySQL / 自定义 SQLite）自动同步：
+// 幂等、离线于请求路径，不耗每次请求的 D1 额度。未配置任何镜像（纯 D1）时
+// syncD1ToMirrors 为 no-op，线上行为不变。与 wrangler.toml [triggers] crons 配合。
+export default {
+  fetch: app.fetch.bind(app),
+  scheduled: async (_controller: unknown, env: Env, _ctx: unknown): Promise<void> => {
+    await syncD1ToMirrors(env);
+  },
+};
+
