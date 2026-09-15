@@ -160,7 +160,7 @@ api.post("/subdomains", async (c) => {
 
   // 验证子域名格式
   const subdomainLower = subdomain.toLowerCase().trim();
-  if (!/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/.test(subdomainLower)) {
+  if (!/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$/.test(subdomainLower)) {
     return c.json(
       {
         error:

@@ -59,11 +59,10 @@ function renderPage({
   friendLinks?: { name: string; url: string }[];
   adminContactEmail?: string;
 }) {
-  // 外链→本域中转：HTML 只暴露本站 /assets 路径，不泄露外链真实域名，
-  // 且访客只接本站、外部源站只接 Worker（保源站安全）。
-  const proxyUrl = (u?: string | null) => (u ? `/assets?src=${encodeURIComponent(u)}` : '');
+  // 外链→本域中转：HTML 只暴露本站固定路径（/logo、/bg、/assets），不泄露外链真实域名，
+  // 真实 URL 只存在于服务端 env；访客只接本站、外部源站只接 Worker（保源站安全）。
   const bgStyle = backgroundImage
-    ? `background-image: url('${proxyUrl(backgroundImage)}'); background-size: cover; background-position: center; background-attachment: fixed;`
+    ? `background-image: url('/bg'); background-size: cover; background-position: center; background-attachment: fixed;`
     : '';
 
   const overlayStyle = backgroundImage
@@ -80,10 +79,12 @@ function renderPage({
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${siteName}</title>
   ${raw(siteLogo
-    ? `<link rel="icon" href="${proxyUrl(siteLogo)}" type="image/png">`
+    ? `<link rel="icon" href="/logo" type="image/png">`
     : `<link rel="icon" href="data:image/svg+xml;base64,${btoa(defaultLogoSvg)}">`)}
   ${raw(`<link rel="shortcut icon" href="/favicon.ico">`)}
-  ${raw(`<link rel="apple-touch-icon" href="${proxyUrl(siteLogo) || `data:image/svg+xml;base64,${btoa(defaultLogoSvg)}`}">`)}
+  ${raw(siteLogo
+    ? `<link rel="apple-touch-icon" href="/logo">`
+    : `<link rel="apple-touch-icon" href="data:image/svg+xml;base64,${btoa(defaultLogoSvg)}">`)}
   <style>
     :root {
       --font-sans: 'Comic Sans MS', 'YouYuan', '幼圆', 'KaiTi', '楷体', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
@@ -1623,7 +1624,7 @@ function renderPage({
     .section-header { animation: fadeIn 0.5s ease; }
   </style>
   
-  ${raw(backgroundImage ? `<div class="bg-image-wrapper"><img class="bg-image" src="${proxyUrl(backgroundImage)}" alt="background" /><div class="bg-overlay"></div></div>` : '')}
+  ${raw(backgroundImage ? `<div class="bg-image-wrapper"><img class="bg-image" src="/bg" alt="background" /><div class="bg-overlay"></div></div>` : '')}
 </head>
 <body>
   <!-- 可爱的漂浮装饰气泡 -->
@@ -1634,7 +1635,7 @@ function renderPage({
   <header class="header">
     <div class="container">
       <a href="/" class="logo" onclick="navigate('home'); return false;">
-        ${raw(siteLogo ? `<img src="${proxyUrl(siteLogo)}" alt="logo" class="logo-icon" style="width:36px;height:36px;object-fit:contain;background:none;box-shadow:none;border-radius:12px;" />` : `<div class="logo-icon">${defaultLogoSvg}</div>`)}
+        ${raw(siteLogo ? `<img src="/logo" alt="logo" class="logo-icon" style="width:36px;height:36px;object-fit:contain;background:none;box-shadow:none;border-radius:12px;" />` : `<div class="logo-icon">${defaultLogoSvg}</div>`)}
         <span>${siteName}</span>
       </a>
       <div class="header-actions">
@@ -2030,7 +2031,7 @@ function renderPage({
       const subdomain = document.getElementById('new-subdomain').value.trim().toLowerCase();
       const domain = document.getElementById('new-domain').value;
       if (!subdomain) { toast('请输入子域名', 'error'); return; }
-      if (!/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/.test(subdomain)) { toast('子域名格式无效', 'error'); return; }
+      if (!/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$/.test(subdomain)) { toast('子域名格式无效', 'error'); return; }
       if (subdomain.length < 2) { toast('子域名至少 2 个字符', 'error'); return; }
       if (state.config.banned_prefixes && state.config.banned_prefixes.includes(subdomain)) { toast('该子域名前缀已被禁止', 'error'); return; }
 

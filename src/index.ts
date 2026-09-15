@@ -210,6 +210,33 @@ app.get('/favicon.ico', async (c) => {
   });
 });
 
+// 固定 logo 端点：HTML 头/导航只引用本站固定路径 /logo，不暴露外链真实域名（SITE_LOGO 仅在服务端 env）。
+// 由 Worker → 源站中转 + 边缘 CDN 缓存（s-maxage=1 天），访客不直连外部源站。
+app.get('/logo', async (c) => {
+  const logo = c.env.SITE_LOGO as string | undefined;
+  if (!logo) return c.body(null, 204);
+  const resp = await fetch(logo, { headers: { 'user-agent': 'SubdomainHub/1.0' } });
+  if (!resp.ok) return c.body(null, 404);
+  const ct = resp.headers.get('content-type') || 'image/png';
+  return new Response(resp.body, {
+    status: 200,
+    headers: { 'content-type': ct, 'cache-control': 'public, max-age=86400, s-maxage=86400', 'x-content-type-options': 'nosniff' },
+  });
+});
+
+// 固定背景端点：HTML 背景只引用 /bg，真实 URL 仅在服务端 env（SITE_BACKGROUND_IMAGE）。
+app.get('/bg', async (c) => {
+  const bg = c.env.SITE_BACKGROUND_IMAGE as string | undefined;
+  if (!bg) return c.body(null, 204);
+  const resp = await fetch(bg, { headers: { 'user-agent': 'SubdomainHub/1.0' } });
+  if (!resp.ok) return c.body(null, 404);
+  const ct = resp.headers.get('content-type') || 'image/jpeg';
+  return new Response(resp.body, {
+    status: 200,
+    headers: { 'content-type': ct, 'cache-control': 'public, max-age=86400, s-maxage=86400', 'x-content-type-options': 'nosniff' },
+  });
+});
+
 // 健康检查
 app.get('/health', (c) => c.json({ status: 'ok', timestamp: new Date().toISOString() }));
 
