@@ -99,8 +99,9 @@
 
 **3) 实施状态**
 - `provider.ts`（选路+健康探测+sqlite/mysql 客户端+S3 SigV4 快照）**已落地且默认关闭**（`DB_QUERY_ORDER` 缺省 `d1` = 现状等价）。
-- **仍未做**：把 `queries.ts` 的 DB 入口**逐查询**统一走 provider 读回退链（生产接线）。此接线为独立 commit，
-  需 `tsc --noEmit` + `wrangler deploy --dry-run` 通过后再上线。
+- 已接线：`queries.ts` 全部纯读查询（用户/子域名/DNS 记录/账户/公告/友链/审批等列表与详情）
+  已走 `dbFirst`/`dbAll`（provider 镜像优先、D1 回退）；写/删路径权威反查保留 `d1First`/`d1All`。
+  读分流已生产可用，`tsc --noEmit` 与 `deploy --dry-run` 通过。
 
 ---
 
@@ -143,6 +144,8 @@
   空闲（无写入）时镜像不消耗 D1 读额度；有写入时才多 1 次 D1 SELECT（该行）+ 镜像写。
 - 一致性：D1 为唯一写主与权威；镜像为可降级副本；漏推/半成功由每日全量
   `syncD1ToMirrors` 自愈，最终一致、无数据丢失。
-- 仍未做（pending，独立 commit）：`queries.ts` 的**读回退链**未接线，当前读仍全走 D1；
-  `DB_QUERY_ORDER` 在读接线完成前不影响读路径。写时增量推已独立生效，与读回退链无依赖。
+- 读回退链已接线（生产可用）：`queries.ts` 以 `dbFirst`/`dbAll`（`pickReadBackend` 按
+  `DB_QUERY_ORDER` 选镜像，连接失败/后端点异常回退 D1 兜底）承载全部纯读查询；写/删路径内部
+  权威反查保留 `d1First`/`d1All`（D1 直查，避免镜像未同步缺行误判“不存在”）。`DB_QUERY_ORDER`
+  含 `custom-sqlite`/`mysql` 即开始对读分流；缺省 `d1` 与原现状完全等价。
 - 验证：`npx tsc --noEmit` 与 `npx wrangler deploy --dry-run`（441.68 KiB / gzip 94.99 KiB）通过。
