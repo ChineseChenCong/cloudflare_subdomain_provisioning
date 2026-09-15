@@ -342,22 +342,23 @@ export async function countSubdomainRecords(
   return result?.count || 0;
 }
 
+/** 写操作前的权威定位：直接查 D1（绑定 CD 或自增主键 id，D1 为唯一权威，避免读镜像缺行误判“不存在”） */
 export async function getDnsRecordById(
   env: Env,
   id: number,
 ): Promise<DnsRecord | null> {
-  return dbFirst<DnsRecord>(env, "SELECT * FROM dns_records WHERE id = ?", [
+  return d1First<DnsRecord>(env, "SELECT * FROM dns_records WHERE id = ?", [
     id,
   ]);
 }
 
-/** 按 Cloudflare 记录 ID 反查（DNS 实时读取模式下，更新/删除以 CF id 定位） */
+/** 按 Cloudflare 记录 ID 反查（DNS 实时读取模式下，更新/删除以 CF id 定位；D1 权威直查） */
 export async function getDnsRecordByCfId(
   env: Env,
   subdomainId: number,
   cfRecordId: string,
 ): Promise<DnsRecord | null> {
-  return dbFirst<DnsRecord>(
+  return d1First<DnsRecord>(
     env,
     "SELECT * FROM dns_records WHERE subdomain_id = ? AND cf_record_id = ?",
     [subdomainId, cfRecordId],

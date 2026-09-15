@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import type { Context } from "hono";
-import type { Env, User, DnsRecordInput } from "../types";
+import type { Env, User, DnsRecord, DnsRecordInput } from "../types";
 import { ALLOWED_RECORD_TYPES as RECORD_TYPES } from "../types";
 import {
   authMiddleware,
@@ -544,6 +544,24 @@ async function foldApprovalAndNotify(
   }
 }
 
+/** 统一定位 DNS 记录：兼容 CF 实时读 (hex cf_record_id) 与 DB 数字主键两种 id 来源，
+ *  只读展示两种模式随意切换也不会导致写操作 404。 */
+async function locateDnsRecord(
+  env: Env,
+  subdomainId: number,
+  idRaw: string,
+): Promise<DnsRecord | null> {
+  const sId = String(idRaw).trim();
+  let record = await getDnsRecordByCfId(env, subdomainId, sId);
+  if (!record) {
+    // hex 未命中本子域即视为不存在（记录必属于当前子域，如非则属越权/外部 id），
+    // 仅回退数字主键查找；不引入全表扫描以免消耗 D1 rows-read 额度。
+    const did = parseInt(sId, 10);
+    if (!Number.isNaN(did)) record = await getDnsRecordById(env, did);
+  }
+  return record;
+}
+
 // ==================== DNS 记录管理 ====================
 
 /**
@@ -762,9 +780,7 @@ api.put("/subdomains/:id/records/:recordId", async (c) => {
     return c.json({ error: "子域名尚未通过审核" }, 403);
   }
 
-  const existingRecord = isDnsLiveRead(c.env)
-    ? await getDnsRecordByCfId(c.env, subdomain.id, recordIdRaw)
-    : await getDnsRecordById(c.env, parseInt(recordIdRaw, 10));
+  const existingRecord = await locateDnsRecord(c.env, subdomain.id, recordIdRaw);
   if (!existingRecord || existingRecord.subdomain_id !== subdomain.id) {
     return c.json({ error: "DNS 记录不存在" }, 404);
   }
@@ -845,9 +861,7 @@ api.delete("/subdomains/:id/records/:recordId", async (c) => {
     return c.json({ error: "无权操作此子域名" }, 403);
   }
 
-  const record = isDnsLiveRead(c.env)
-    ? await getDnsRecordByCfId(c.env, subdomain.id, recordIdRaw)
-    : await getDnsRecordById(c.env, parseInt(recordIdRaw, 10));
+  const record = await locateDnsRecord(c.env, subdomain.id, recordIdRaw);
   if (!record || record.subdomain_id !== subdomain.id) {
     return c.json({ error: "DNS 记录不存在" }, 404);
   }

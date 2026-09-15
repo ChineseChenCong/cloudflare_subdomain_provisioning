@@ -4,6 +4,7 @@ import { authMiddleware, emailVerifiedMiddleware } from "../middleware/auth";
 import {
   getSubdomainById,
   getDnsRecordById,
+  getDnsRecordByCfId,
   updateDnsRecordEntry,
 } from "../db/queries";
 import { mirrorSyncRow } from "../services/mirror";
@@ -20,17 +21,24 @@ const proxied = new Hono<{ Bindings: Env; Variables: Variables }>();
 proxied.use("/*", authMiddleware, emailVerifiedMiddleware);
 
 // 切换 DNS 记录的代理状态
-proxied.put("/records/:recordId/proxied", async (c) => {
+proxied.put("/records/:subdomainId/:recordId/proxied", async (c) => {
   const user = c.get("user");
-  const recordId = parseInt(c.req.param("recordId"), 10);
+  const subdomainIdRaw = c.req.param("subdomainId");
+  const recordIdRaw = c.req.param("recordId");
   const body = await c.req.json<{ proxied: boolean }>();
 
   if (typeof body.proxied !== "boolean") {
     return c.json({ error: "请提供 proxied 状态" }, 400);
   }
 
-  // 获取 DNS 记录
-  const record = await getDnsRecordById(c.env, recordId);
+  // 获取 DNS 记录（兼容 CF hex id 与 DB 数字主键）；
+  // 优先走子域约束索引匹配，避免无 subdomain 上下文的全表扫描消耗 D1 rows-read 额度。
+  const subId = parseInt(subdomainIdRaw, 10);
+  const did = parseInt(recordIdRaw, 10);
+  const record = Number.isNaN(subId)
+    ? null
+    : (await getDnsRecordByCfId(c.env, subId, recordIdRaw)) ??
+      (!Number.isNaN(did) ? await getDnsRecordById(c.env, did) : null);
   if (!record) {
     return c.json({ error: "DNS 记录不存在" }, 404);
   }

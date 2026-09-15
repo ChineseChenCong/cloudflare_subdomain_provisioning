@@ -715,10 +715,10 @@ function renderPage({
             '<td>'+(r.proxied
               ?'<span class="proxy-indicator proxied">' + icons.cloud + ' 已代理</span>'
               :'<span class="proxy-indicator direct">直接</span>')+'</td>' +
-            '<td><div class="proxied-toggle ' + (r.proxied ? 'active' : '') + '" onclick="toggleProxied(' + r.id + ', ' + r.proxied + ')" title="切换代理状态"></div></td>' +
+            '<td><div class="proxied-toggle ' + (r.proxied ? 'active' : '') + '" onclick="toggleProxied(\\'' + state.currentSubdomain + '\\',\\'' + r.id + '\\', ' + r.proxied + ')" title="切换代理状态"></div></td>' +
             '<td><div style="display:flex;gap:4px">' +
-            '<button class="btn btn-ghost btn-sm" onclick="editRecord('+r.id+')" title="编辑" style="display:flex">' + icons.edit + '</button>' +
-            '<button class="btn btn-ghost btn-sm" onclick="deleteRecordConfirm('+r.id+',\\''+escapeHtml(r.name)+'\\',\\''+escapeHtml(r.record_type)+'\\')" title="删除" style="display:flex">' + icons.trash + '</button>' +
+            '<button class="btn btn-ghost btn-sm" onclick="editRecord(\''+r.id+'\')" title="编辑" style="display:flex">' + icons.edit + '</button>' +
+            '<button class="btn btn-ghost btn-sm" onclick="deleteRecordConfirm(\\''+r.id+'\\',\\''+escapeHtml(r.name)+'\\',\\''+escapeHtml(r.record_type)+'\\')" title="删除" style="display:flex">' + icons.trash + '</button>' +
             '</div></td></tr>';
         });
         }
@@ -754,7 +754,7 @@ function renderPage({
     }
 
     function editRecord(id) {
-      const r = state.records.find(r => r.id===id);
+      const r = state.records.find(r => String(r.id)===String(id));
       if (!r) return;
       state.editingRecord = r;
       render();
@@ -795,9 +795,9 @@ function renderPage({
     }
 
     // ==================== Proxied Toggle ====================
-    async function toggleProxied(recordId, currentProxied) {
+    async function toggleProxied(subdomainId, recordId, currentProxied) {
       try {
-        const res = await api('/proxied/records/' + recordId + '/proxied', {
+        const res = await api('/proxied/records/' + subdomainId + '/' + recordId + '/proxied', {
           method: 'PUT',
           body: JSON.stringify({ proxied: !currentProxied }),
         });
