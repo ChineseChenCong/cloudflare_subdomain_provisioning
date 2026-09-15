@@ -349,6 +349,43 @@ export function buildUserDeletedAdminEmail(
   };
 }
 
+/** 已审批赋予他人的子域被删除后，通知二级域名持有人（父级拥有者/审批人） */
+export function buildApprovedSubdomainRemovedToApproverEmail(
+  approverName: string,
+  targetFqdn: string,
+  baseFqdn: string,
+  removedBy: string,
+  siteName: string,
+  siteUrl: string
+): EmailOptions {
+  return {
+    to: '',
+    subject: `ℹ️ 您拥有 ${baseFqdn} 下经审批的子域 ${targetFqdn} 已被移除 - ${siteName}`,
+    html: `
+<!DOCTYPE html>
+<html><body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f8f9fa;padding:40px 0;">
+<div style="max-width:520px;margin:0 auto;background:white;border-radius:12px;padding:40px;box-shadow:0 2px 12px rgba(0,0,0,0.08);">
+  <h2 style="color:#2563eb;margin:0 0 16px;">ℹ️ 名下审批子域已被移除</h2>
+  <p style="color:#333;font-size:15px;line-height:1.6;">
+    您拥有的
+    <strong style="font-family:monospace;background:#eff6ff;padding:2px 8px;border-radius:4px;">${baseFqdn}</strong>
+    之下，此前经您审批授予他人使用的子域名
+    <strong style="font-family:monospace;background:#fef2f2;padding:2px 8px;border-radius:4px;">${targetFqdn}</strong>
+    已被<b>${removedBy}</b>删除，其 DNS 解析配置已同步移除，该子域名不再生效。
+  </p>
+  <p style="color:#333;font-size:15px;line-height:1.6;margin-top:16px;">
+    此变更无需您额外操作。若您仍希望该位置存在子域名，可重新发起申请；他人如需再次使用 ${targetFqdn}，需按流程重新向您申请审批。
+  </p>
+  <div style="text-align:center;margin:24px 0;">
+    <a href="${siteUrl}" style="background:#2563eb;color:#fff;padding:12px 32px;border-radius:8px;text-decoration:none;font-weight:600;">返回 ${siteName}</a>
+  </div>
+  <p style="color:#999;font-size:12px;margin-top:24px;border-top:1px solid #eee;padding-top:16px;">此邮件由 ${siteName} 自动发送，请勿直接回复。</p>
+</div>
+</body></html>`,
+    text: `您拥有的 ${baseFqdn} 下，此前经您审批授予使用的子域名 ${targetFqdn} 已被（${removedBy}）删除，其 DNS 解析已同步移除。`,
+  };
+}
+
 /** 上级所有权审批请求：发给“最近被拥有的祖先”的所有者，含确定/驳回按钮 */
 export function buildOwnerApprovalRequestEmail(
   ownerName: string,

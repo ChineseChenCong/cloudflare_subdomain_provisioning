@@ -10,6 +10,7 @@ import verificationRoutes from './routes/verification';
 import proxiedRoutes from './routes/proxied';
 import announcementRoutes from './routes/announcements';
 import { verifyEmailByToken } from './services/email-verification';
+import { APP_CSS } from './assets/app.css';
 import {
   getOwnerApprovalByToken,
   setOwnerApprovalStatus,
@@ -236,6 +237,20 @@ app.get('/bg', async (c) => {
     headers: { 'content-type': ct, 'cache-control': 'public, max-age=86400, s-maxage=86400', 'x-content-type-options': 'nosniff' },
   });
 });
+
+// 静态样式表：页面 HTML 仅引用 /static/app.css，命中浏览器本地缓存(immutable)
+// 与 CF 边缘 CDN(s-maxage) 后不再触发 Worker、不耗出站 —— 省 Worker 请求/带宽主战场。
+// 样式内容固定不变（内容 hash 无变化），可安全长缓存；若样式更新需改路径(加版本号)。
+app.get('/static/app.css', (c) =>
+  new Response(APP_CSS, {
+    status: 200,
+    headers: {
+      'content-type': 'text/css; charset=utf-8',
+      'cache-control': 'public, max-age=31536000, s-maxage=31536000, immutable',
+      'x-content-type-options': 'nosniff',
+    },
+  })
+);
 
 // 健康检查
 app.get('/health', (c) => c.json({ status: 'ok', timestamp: new Date().toISOString() }));

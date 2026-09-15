@@ -1,94 +1,16 @@
-import { Hono } from 'hono';
-import { html, raw } from 'hono/html';
-import type { Env, User } from '../types';
-import { optionalAuthMiddleware } from '../middleware/auth';
-import {
-  getBackgroundImage,
-  getBackgroundOverlay,
-  getSiteLogo,
-  getSiteName,
-  getSiteBeian,
-  getFriendLinks,
-  getAdminContactEmail,
-} from '../config';
-
-type Variables = { user: User };
-
-const pages = new Hono<{ Bindings: Env; Variables: Variables }>();
-
-pages.use('/*', optionalAuthMiddleware);
-
-pages.get('/', (c) => {
-  const user = c.get('user');
-  const siteName = getSiteName(c.env);
-  const backgroundImage = getBackgroundImage(c.env);
-  const backgroundOverlay = getBackgroundOverlay(c.env);
-  const siteLogo = getSiteLogo(c.env);
-  const beian = getSiteBeian(c.env);
-  const friendLinks = getFriendLinks(c.env);
-  const adminContactEmail = getAdminContactEmail(c.env);
-
-  return c.html(renderPage({
-    siteName,
-    user,
-    backgroundImage,
-    backgroundOverlay,
-    siteLogo,
-    beian,
-    friendLinks,
-    adminContactEmail,
-  }));
-});
-
-function renderPage({
-  siteName,
-  user,
-  backgroundImage,
-  backgroundOverlay,
-  siteLogo,
-  beian,
-  friendLinks,
-  adminContactEmail,
-}: {
-  siteName: string;
-  user?: User;
-  backgroundImage?: string | null;
-  backgroundOverlay?: string;
-  siteLogo?: string | null;
-  beian?: string;
-  friendLinks?: { name: string; url: string }[];
-  adminContactEmail?: string;
-}) {
-  // 外链→本域中转：HTML 只暴露本站固定路径（/logo、/bg、/assets），不泄露外链真实域名，
-  // 真实 URL 只存在于服务端 env；访客只接本站、外部源站只接 Worker（保源站安全）。
-  const bgStyle = backgroundImage
-    ? `background-image: url('/bg'); background-size: cover; background-position: center; background-attachment: fixed;`
-    : '';
-
-  const overlayStyle = backgroundImage
-    ? `position: relative;`
-    : '';
-
-  // 默认 Logo（萌系 Cloudflare 卫星风格 SVG）
-  const defaultLogoSvg = `<svg viewBox="0 0 64 64" width="38" height="38" xmlns="http://www.w3.org/2000/svg" style="border-radius:12px"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3b82f6"/><stop offset=".5" stop-color="#8b5cf6"/><stop offset="1" stop-color="#ec4899"/></linearGradient></defs><rect x="2" y="2" width="60" height="60" rx="14" fill="url(#lg)"/><circle cx="32" cy="32" r="14" fill="#fff" opacity=".95"/><g fill="#3b82f6"><circle cx="27" cy="28" r="4"/><circle cx="37" cy="28" r="4"/><circle cx="28" cy="25" r="2.2"/><circle cx="38" cy="25" r="2.2"/><path d="M23 34c2-4 5-3 5-3h8s3-1 5 3l1 4H22z" fill="#2563eb"/><path d="M24 35c1.6-2.6 4-2 4-2h8s2.4-.6 4 2" fill="none" stroke="#60a5fa" stroke-width="2" stroke-linecap="round"/></g></svg>`;
-
-  return html`<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN" data-theme="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${siteName}</title>
-  ${raw(siteLogo
-    ? `<link rel="icon" href="/logo" type="image/png">`
-    : `<link rel="icon" href="data:image/svg+xml;base64,${btoa(defaultLogoSvg)}">`)}
-  ${raw(`<link rel="shortcut icon" href="/favicon.ico">`)}
-  ${raw(siteLogo
-    ? `<link rel="apple-touch-icon" href="/logo">`
-    : `<link rel="apple-touch-icon" href="data:image/svg+xml;base64,${btoa(defaultLogoSvg)}">`)}
+  <title>R.O.L. Domain System</title>
+  <link rel="icon" href="/logo" type="image/png">
+  <link rel="shortcut icon" href="/favicon.ico">
+  <link rel="apple-touch-icon" href="/logo">
   <link rel="stylesheet" href="/static/app.css">
-  ${raw(backgroundOverlay ? `<style>:root { --overlay: ${backgroundOverlay}; }</style>` : '')}
   
-  ${raw(backgroundImage ? `<div class="bg-image-wrapper"><img class="bg-image" src="/bg" alt="background" /><div class="bg-overlay"></div></div>` : '')}
+  
+  
 </head>
 <body>
   <!-- 可爱的漂浮装饰气泡 -->
@@ -99,8 +21,8 @@ function renderPage({
   <header class="header">
     <div class="container">
       <a href="/" class="logo" onclick="navigate('home'); return false;">
-        ${raw(siteLogo ? `<img src="/logo" alt="logo" class="logo-icon" style="width:36px;height:36px;object-fit:contain;background:none;box-shadow:none;border-radius:12px;" />` : `<div class="logo-icon">${defaultLogoSvg}</div>`)}
-        <span>${siteName}</span>
+        <img src="/logo" alt="logo" class="logo-icon" style="width:36px;height:36px;object-fit:contain;background:none;box-shadow:none;border-radius:12px;" />
+        <span>R.O.L. Domain System</span>
       </a>
       <div class="header-actions">
         <button class="theme-toggle" onclick="toggleTheme()" title="切换主题">
@@ -156,7 +78,7 @@ function renderPage({
     };
 
     const state = {
-      user: ${raw(user ? `JSON.parse('${JSON.stringify({ id: user.id, github_username: user.github_username, avatar_url: user.avatar_url, is_admin: !!user.is_admin, email: user.email, email_verified: user.email_verified })}')` : 'null')}, // 头像走 GitHub 直连（av 头像域公共公开，无需代理；量大避免吃 /assets 额度）
+      user: null, // 头像走 GitHub 直连（av 头像域公共公开，无需代理；量大避免吃 /assets 额度）
       domains: [],
       subdomains: [],
       records: [],
@@ -181,8 +103,6 @@ function renderPage({
       subPager: { page: 1, perPage: 5 },
       dnsPager: { page: 1, perPage: 5 },
       dnsTypeFilter: '',
-      // 审批面板分页（待处理·待我处理 / 待处理·我发起 / 已处理折叠区）
-      apprPager: { apPage: 1, apPer: 5, rqPage: 1, rqPer: 5, donePage: 1, donePer: 5 },
       // Email verification
       emailVerificationRequired: false,
       allowedEmailDomains: [],
@@ -266,7 +186,7 @@ function renderPage({
       if (state.user) {
         let adminLink = '';
         if (state.user.is_admin) {
-          adminLink = '<a href="#" class="btn btn-ghost btn-sm" onclick="navigate(\\'admin\\'); return false;" style="font-size:13px">' + icons.admin + ' 管理</a>';
+          adminLink = '<a href="#" class="btn btn-ghost btn-sm" onclick="navigate(\'admin\'); return false;" style="font-size:13px">' + icons.admin + ' 管理</a>';
         }
         el.innerHTML = '<div class="user-info">' +
           '<img class="user-avatar" src="' + (state.user.avatar_url || '') + '" alt="">' +
@@ -382,40 +302,6 @@ function renderPage({
     function dnsPage(n) { state.dnsPager.page = n; render(); }
     function setDnsPer(n) { state.dnsPager.perPage = n; state.dnsPager.page = 1; render(); }
     function setDnsType(t) { state.dnsTypeFilter = t; state.dnsPager.page = 1; render(); }
-    // 审批面板翻页：sec=ap(待我处理) | rq(我发起) | done(已处理折叠区)
-    function setApprPage(sec, n) {
-      if (sec === 'ap') state.apprPager.apPage = n;
-      else if (sec === 'rq') state.apprPager.rqPage = n;
-      else state.apprPager.donePage = n;
-      render();
-    }
-    function setApprPer(sec, n) {
-      if (sec === 'ap') { state.apprPager.apPer = n; state.apprPager.apPage = 1; }
-      else if (sec === 'rq') { state.apprPager.rqPer = n; state.apprPager.rqPage = 1; }
-      else { state.apprPager.donePer = n; state.apprPager.donePage = 1; }
-      render();
-    }
-    // 审批面板专用分页控件（同 pagerControl 样式，onclick 携带分区参数 sec）
-    function apprPagerControl(list, total, sec) {
-      const per = list.per;
-      const pages = list.pages;
-      const cur = list.page;
-      const prev = cur > 1 ? cur - 1 : 1;
-      const next = cur < pages ? cur + 1 : pages;
-      let c = '<div class="pager" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-top:14px">';
-      c += '<label style="font-size:13px;color:var(--text-muted);display:flex;align-items:center;gap:6px">每页 ' +
-        '<select class="form-select" style="width:auto;padding:4px 26px 4px 10px;font-size:12px" onchange="setApprPer(\'' + sec + '\',parseInt(this.value))">' +
-        [5,10,20,50].map(function (n) { return '<option value="'+n+'"'+(per===n?' selected':'')+'>'+n+' 条</option>'; }).join('') +
-        '</select></label>';
-      c += '<div style="display:flex;align-items:center;gap:6px">' +
-        '<button class="btn btn-sm btn-secondary" onclick="setApprPage(\'' + sec + '\',1)"'+(cur<=1?' disabled':'')+'>«</button>' +
-        '<button class="btn btn-sm btn-secondary" onclick="setApprPage(\'' + sec + '\','+prev+')"'+(cur<=1?' disabled':'')+'>‹</button>' +
-        '<span style="font-size:13px;color:var(--text-primary);min-width:64px;text-align:center">' + cur + ' / ' + pages + '</span>' +
-        '<button class="btn btn-sm btn-secondary" onclick="setApprPage(\'' + sec + '\','+next+')"'+(cur>=pages?' disabled':'')+'>›</button>' +
-        '<button class="btn btn-sm btn-secondary" onclick="setApprPage(\'' + sec + '\','+pages+')"'+(cur>=pages?' disabled':'')+'>»</button>' +
-        '</div></div>';
-      return c;
-    }
 
     function renderApprovalsPanel() {
       const rq = state.ownerApprovals.requester || [];
@@ -423,9 +309,9 @@ function renderPage({
 
       // 分区：仅「待处理」(pending 且未超时) 留在主区；已处理(同意/驳回/超时)折入底部「已处理」折叠区，避免主区越来越长。
       const apPending = ap.filter((a) => ownerApprovalMeta(a).st === 'pending');
-      const apDone = ap.filter((a) => ownerApprovalMeta(a).st !== 'pending' && ownerApprovalMeta(a).st !== 'deleted');
+      const apDone = ap.filter((a) => ownerApprovalMeta(a).st !== 'pending');
       const rqPending = rq.filter((a) => ownerApprovalMeta(a).st === 'pending');
-      const rqDone = rq.filter((a) => ownerApprovalMeta(a).st !== 'pending' && ownerApprovalMeta(a).st !== 'deleted');
+      const rqDone = rq.filter((a) => ownerApprovalMeta(a).st !== 'pending');
       const doneCount = apDone.length + rqDone.length;
 
       let h = '<div class="section"><div class="section-header">' +
@@ -433,19 +319,16 @@ function renderPage({
         '<span style="font-size:13px;color:var(--text-muted)">' + apPending.length + ' 待我处理 · ' + rqPending.length + ' 我发起的' +
         (doneCount > 0 ? ' · ' + doneCount + ' 已处理' : '') + '</span></div>';
 
-      if (apPending.length === 0 && rqPending.length === 0 && doneCount === 0) {
+      if (rq.length === 0 && ap.length === 0) {
         h += '<div class="card"><p style="color:var(--text-muted);margin:0">暂无审批请求。申请更深一层的子域名时，若其上级已被他人拥有，该申请会出现在这里等待其所有者同意；若您是所有者，他人申请您名下子域的请求也会在此处理。</p></div>';
         h += '</div>';
         return h;
       }
 
-      const apList = paginateItems(apPending, { page: state.apprPager.apPage, perPage: state.apprPager.apPer });
-      const rqList = paginateItems(rqPending, { page: state.apprPager.rqPage, perPage: state.apprPager.rqPer });
-
       if (apPending.length > 0) {
         h += '<div class="card" style="margin-bottom:12px">' +
           '<div class="record-form-title" style="display:flex;align-items:center;gap:6px;margin-bottom:4px">' + icons.shield + ' 待我审批·上层所有权请求</div>';
-        apList.items.forEach((a) => {
+        apPending.forEach((a) => {
           const m = ownerApprovalMeta(a);
           const dl = a.deadline_at ? new Date(a.deadline_at).toLocaleString('zh-CN') : '';
           h += '<div class="subdomain-card" style="border-bottom:1px solid var(--border);padding:10px 0">' +
@@ -455,18 +338,17 @@ function renderPage({
             ' · 申请位于 <b>' + escapeHtml(a.base_fqdn) + '</b> 之下</p>' +
             '<p style="font-size:12px;color:var(--text-muted);margin:0">截止 ' + dl + ' · 超时未处理将自动驳回</p>' +
             '</div><div class="subdomain-actions">' +
-            '<button class="btn btn-primary btn-sm btn-jelly" onclick="decideOwnerApproval(' + a.id + ',\\'approve\\')">同意</button>' +
-            '<button class="btn btn-danger btn-sm" onclick="decideOwnerApproval(' + a.id + ',\\'reject\\')">驳回</button>' +
+            '<button class="btn btn-primary btn-sm btn-jelly" onclick="decideOwnerApproval(' + a.id + ',\'approve\')">同意</button>' +
+            '<button class="btn btn-danger btn-sm" onclick="decideOwnerApproval(' + a.id + ',\'reject\')">驳回</button>' +
             '</div></div>';
         });
-        if (apList.pages > 1) h += apprPagerControl(apList, apPending.length, 'ap');
         h += '</div>';
       }
 
       if (rqPending.length > 0) {
         h += '<div class="card">' +
           '<div class="record-form-title" style="display:flex;align-items:center;gap:6px;margin-bottom:4px">' + icons.pending + ' 我发起的审批申请</div>';
-        rqList.items.forEach((a) => {
+        rqPending.forEach((a) => {
           const m = ownerApprovalMeta(a);
           const dlTxt = '截止 ' + (a.deadline_at ? new Date(a.deadline_at).toLocaleString('zh-CN') : '');
           h += '<div class="subdomain-card" style="border-bottom:1px solid var(--border);padding:10px 0">' +
@@ -476,7 +358,6 @@ function renderPage({
             '<p style="font-size:12px;color:var(--text-muted);margin:0">' + dlTxt + '</p>' +
             '</div><div class="subdomain-actions"></div></div>';
         });
-        if (rqList.pages > 1) h += apprPagerControl(rqList, rqPending.length, 'rq');
         h += '</div>';
       }
 
@@ -486,8 +367,7 @@ function renderPage({
           '<span>已处理 · 共 ' + doneCount + ' 条（同意 / 驳回 / 已超时）</span><span style="color:var(--text-muted)">点此展开查看</span></summary>' +
           '<div style="padding:4px 16px 12px">';
         const doneAll = apDone.concat(rqDone);
-        const doneList = paginateItems(doneAll, { page: state.apprPager.donePage, perPage: state.apprPager.donePer });
-        doneList.items.forEach((a) => {
+        doneAll.forEach((a) => {
           const m = ownerApprovalMeta(a);
           let role = '';
           if (apDone.indexOf(a) >= 0) role = '待我审批 · 我是所有者';
@@ -501,7 +381,6 @@ function renderPage({
             '<p style="font-size:12px;color:var(--text-muted);margin:0">' + role + (when ? ' · ' + when : '') + '</p>' +
             '</div><div class="subdomain-actions"></div></div>';
         });
-        if (doneList.pages > 1) h += apprPagerControl(doneList, doneAll.length, 'done');
         h += '</div></details>';
       }
 
@@ -525,7 +404,7 @@ function renderPage({
               '<button class="btn btn-sm" onclick="sendVerificationEmail()">发送验证邮件</button>'
             : '<p>📧 您还没有绑定邮箱，请先绑定邮箱后即可申请子域名</p>' +
               '<div class="verify-binder">' +
-              '<input type="email" class="form-input" id="bind-email" placeholder="name@' + ((state.allowedEmailDomains && state.allowedEmailDomains[0]) || 'example.com').replace(/\\*/g, '') + '" onkeydown="if(event.key===\\Enter\\'){bindEmail();}" />' +
+              '<input type="email" class="form-input" id="bind-email" placeholder="name@' + ((state.allowedEmailDomains && state.allowedEmailDomains[0]) || 'example.com').replace(/\*/g, '') + '" onkeydown="if(event.key===\Enter\'){bindEmail();}" />' +
               '<button class="btn btn-primary btn-sm btn-jelly" onclick="bindEmail()">绑定并发送验证邮件</button>' +
               '</div>') +
           '</div>' +
@@ -576,7 +455,7 @@ function renderPage({
             h += '<button class="btn btn-primary btn-sm btn-jelly" onclick="openDnsManager(' + sub.id + ')">管理 DNS</button>';
           }
 
-          h += '<button class="btn btn-danger btn-sm" onclick="deleteSubdomainConfirm(' + sub.id + ',\\'' + escapeHtml(fqdn) + '\\')">删除</button>' +
+          h += '<button class="btn btn-danger btn-sm" onclick="deleteSubdomainConfirm(' + sub.id + ',\'' + escapeHtml(fqdn) + '\')">删除</button>' +
             '</div></div>';
         });
       }
@@ -606,7 +485,7 @@ function renderPage({
       const subdomain = document.getElementById('new-subdomain').value.trim().toLowerCase();
       const domain = document.getElementById('new-domain').value;
       if (!subdomain) { toast('请输入子域名', 'error'); return; }
-      if (!/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$/.test(subdomain)) { toast('子域名格式无效', 'error'); return; }
+      if (!/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$/.test(subdomain)) { toast('子域名格式无效', 'error'); return; }
       if (subdomain.length < 2) { toast('子域名至少 2 个字符', 'error'); return; }
       if (state.config.banned_prefixes && state.config.banned_prefixes.includes(subdomain)) { toast('该子域名前缀已被禁止', 'error'); return; }
 
@@ -657,7 +536,7 @@ function renderPage({
       const dp = paginateItems(list, state.dnsPager);
 
       let h = '<div class="dashboard fade-in">' +
-        '<a href="#" class="back-link" onclick="navigate(\\'dashboard\\'); return false;">← 返回子域名列表</a>' +
+        '<a href="#" class="back-link" onclick="navigate(\'dashboard\'); return false;">← 返回子域名列表</a>' +
         '<div class="dns-header"><h2>' + escapeHtml(fqdn) + ' - DNS 管理</h2></div>' +
         '<p style="font-size:13px;color:var(--text-muted);margin-bottom:20px;">记录: ' + (state.currentRecordCount||0) + ' / ' + (state.maxRecords||20) +
         ' · 名称 @ 或留空 = ' + escapeHtml(fqdn) + '，填 "www" = www.' + escapeHtml(fqdn) + '</p>';
@@ -718,7 +597,7 @@ function renderPage({
             '<td><div class="proxied-toggle ' + (r.proxied ? 'active' : '') + '" onclick="toggleProxied(' + r.id + ', ' + r.proxied + ')" title="切换代理状态"></div></td>' +
             '<td><div style="display:flex;gap:4px">' +
             '<button class="btn btn-ghost btn-sm" onclick="editRecord('+r.id+')" title="编辑" style="display:flex">' + icons.edit + '</button>' +
-            '<button class="btn btn-ghost btn-sm" onclick="deleteRecordConfirm('+r.id+',\\''+escapeHtml(r.name)+'\\',\\''+escapeHtml(r.record_type)+'\\')" title="删除" style="display:flex">' + icons.trash + '</button>' +
+            '<button class="btn btn-ghost btn-sm" onclick="deleteRecordConfirm('+r.id+',\''+escapeHtml(r.name)+'\',\''+escapeHtml(r.record_type)+'\')" title="删除" style="display:flex">' + icons.trash + '</button>' +
             '</div></td></tr>';
         });
         }
@@ -827,17 +706,17 @@ function renderPage({
       const pendingCount = state.adminPending.length;
 
       let h = '<div class="dashboard fade-in">' +
-        '<a href="#" class="back-link" onclick="navigate(\\'dashboard\\'); return false;">← 返回面板</a>' +
+        '<a href="#" class="back-link" onclick="navigate(\'dashboard\'); return false;">← 返回面板</a>' +
         '<div class="section-header" style="margin-top:16px"><h2 class="section-title" style="display:flex;align-items:center;gap:8px">' + icons.admin + ' 管理员面板</h2></div>';
 
       // Tabs
       h += '<div class="tabs">' +
-        '<button class="tab'+(state.adminTab==='pending'?' active':'')+'" onclick="switchAdminTab(\\'pending\\')">待审核' +
+        '<button class="tab'+(state.adminTab==='pending'?' active':'')+'" onclick="switchAdminTab(\'pending\')">待审核' +
         (pendingCount > 0 ? '<span class="tab-count">'+pendingCount+'</span>' : '') + '</button>' +
-        '<button class="tab'+(state.adminTab==='all'?' active':'')+'" onclick="switchAdminTab(\\'all\\')">所有子域名</button>' +
-        '<button class="tab'+(state.adminTab==='users'?' active':'')+'" onclick="switchAdminTab(\\'users\\')">用户管理</button>' +
-        '<button class="tab'+(state.adminTab==='announcements'?' active':'')+'" onclick="switchAdminTab(\\'announcements\\')">公告管理</button>' +
-        '<button class="tab'+(state.adminTab==='accounts'?' active':'')+'" onclick="switchAdminTab(\\'accounts\\')">' + icons.key + ' Cloudflare 账户</button>' +
+        '<button class="tab'+(state.adminTab==='all'?' active':'')+'" onclick="switchAdminTab(\'all\')">所有子域名</button>' +
+        '<button class="tab'+(state.adminTab==='users'?' active':'')+'" onclick="switchAdminTab(\'users\')">用户管理</button>' +
+        '<button class="tab'+(state.adminTab==='announcements'?' active':'')+'" onclick="switchAdminTab(\'announcements\')">公告管理</button>' +
+        '<button class="tab'+(state.adminTab==='accounts'?' active':'')+'" onclick="switchAdminTab(\'accounts\')">' + icons.key + ' Cloudflare 账户</button>' +
         '</div>';
 
       if (state.adminTab === 'pending') {
@@ -875,8 +754,8 @@ function renderPage({
           (sub.email ? '<span style="display:flex;align-items:center">' + icons.email + ' ' + escapeHtml(sub.email) + '</span>' : '') +
           '</div></div>' +
           '<div style="display:flex;gap:8px">' +
-          '<button class="btn btn-success btn-sm btn-jelly" onclick="approveSubdomain('+sub.id+',\\''+escapeHtml(fqdn)+'\\')">' + icons.approved + ' 通过</button>' +
-          '<button class="btn btn-danger btn-sm" onclick="rejectSubdomainModal('+sub.id+',\\''+escapeHtml(fqdn)+'\\')">' + icons.rejected + ' 拒绝</button>' +
+          '<button class="btn btn-success btn-sm btn-jelly" onclick="approveSubdomain('+sub.id+',\''+escapeHtml(fqdn)+'\')">' + icons.approved + ' 通过</button>' +
+          '<button class="btn btn-danger btn-sm" onclick="rejectSubdomainModal('+sub.id+',\''+escapeHtml(fqdn)+'\')">' + icons.rejected + ' 拒绝</button>' +
           '</div></div></div>';
       });
       return h;
@@ -896,7 +775,7 @@ function renderPage({
           '<td>' + escapeHtml(sub.github_username) + '</td>' +
           '<td>' + statusBadge(sub.status) + '</td>' +
           '<td>' + new Date(sub.created_at).toLocaleDateString('zh-CN') + '</td>' +
-          '<td><button class="btn btn-danger btn-sm" onclick="adminDeleteSubdomain('+sub.id+',\\''+escapeHtml(fqdn)+'\\')">删除</button></td></tr>';
+          '<td><button class="btn btn-danger btn-sm" onclick="adminDeleteSubdomain('+sub.id+',\''+escapeHtml(fqdn)+'\')">删除</button></td></tr>';
       });
       h += '</tbody></table></div></div>';
       return h;
@@ -961,7 +840,7 @@ function renderPage({
           '<button class="btn btn-sm ' + (a.is_pinned ? 'btn-ghost' : 'btn-primary') + '" onclick="toggleAnnouncementPin(' + a.id + ')">' + (a.is_pinned ? '取消置顶' : '置顶') + '</button>' +
           '<button class="btn btn-sm btn-primary btn-jelly" onclick="startEditAnnouncement(' + a.id + ')">编辑</button>' +
           '<button class="btn btn-sm ' + (a.is_active ? 'btn-ghost' : 'btn-primary') + '" onclick="toggleAnnouncement(' + a.id + ')">' + (a.is_active ? '隐藏' : '显示') + '</button>' +
-          '<button class="btn btn-sm btn-danger" onclick="deleteAnnouncement(' + a.id + ',\\'' + escapeHtml(a.title) + '\\')">删除</button>' +
+          '<button class="btn btn-sm btn-danger" onclick="deleteAnnouncement(' + a.id + ',\'' + escapeHtml(a.title) + '\')">删除</button>' +
           '</td></tr>';
       });
       h += '</tbody></table></div></div>';
@@ -1120,7 +999,7 @@ function renderPage({
       const input = document.getElementById('bind-email');
       const email = input?.value?.trim().toLowerCase();
       if (!email) { toast('请输入邮箱地址', 'error'); return; }
-      if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]{2,}$/.test(email)) { toast('邮箱格式不正确', 'error'); return; }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) { toast('邮箱格式不正确', 'error'); return; }
       try {
         const res = await api('/verification/bind', { method: 'POST', body: JSON.stringify({ email }) });
         state.user.email = email;
@@ -1281,7 +1160,7 @@ function renderPage({
 
     function renderAccountsPage() {
       let h = '<div class="dashboard fade-in">' +
-        '<a href="#" class="back-link" onclick="navigate(\\'dashboard\\'); return false;">← 返回面板</a>' +
+        '<a href="#" class="back-link" onclick="navigate(\'dashboard\'); return false;">← 返回面板</a>' +
         '<div class="section-header" style="margin-top:16px"><h2 class="section-title" style="display:flex;align-items:center;gap:8px">' + icons.key + ' Cloudflare 账户管理</h2></div>' +
         renderAccountsContent() + '</div>';
       return h;
@@ -1438,27 +1317,23 @@ function renderPage({
 
   <footer class="footer">
     <div class="container">
-      ${raw(friendLinks && friendLinks.length > 0 ? `
+      
       <div class="footer-friendlinks">
         <span class="friend-link-label">✨ 友情链接：</span>
-        ${friendLinks.map((l) => `<a class="friend-link" href="${l.url}" target="_blank" rel="noopener">${l.name}</a>`).join('')}
-      </div>` : '')}
-      <p>Powered by Cloudflare Workers &amp; D1 · ${siteName}</p>
+        <a class="friend-link" href="https://mail.rol.moe" target="_blank" rel="noopener">莉莉安尼亚邮箱系统</a>
+      </div>
+      <p>Powered by Cloudflare Workers &amp; D1 · R.O.L. Domain System</p>
       <p style="margin-top:8px;font-size:12px;color:var(--text-muted);">
         感谢 <a href="https://github.com/Little100/cloudflare_subdomain_provisioning" target="_blank" rel="noopener">Little100/cloudflare_subdomain_provisioning</a> 开源项目
       </p>
-      ${raw(adminContactEmail ? `
+      
       <p style="margin-top:12px;">
-        <a href="mailto:${adminContactEmail}" class="btn btn-primary btn-sm btn-jelly contact-admin-btn" target="_blank">
+        <a href="mailto:admin@mail.rol.moe" class="btn btn-primary btn-sm btn-jelly contact-admin-btn" target="_blank">
           ✉️ 联系管理员
         </a>
-      </p>` : '')}
-      ${raw(beian ? `
-      <p style="margin-top:10px;font-size:12px;color:var(--text-muted);">备案信息：${beian}</p>` : '')}
+      </p>
+      
     </div>
   </footer>
 </body>
-</html>`;
-}
-
-export default pages;
+</html>

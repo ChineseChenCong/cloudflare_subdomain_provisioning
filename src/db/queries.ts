@@ -1069,10 +1069,24 @@ export async function getPendingApprovalByTarget(
     .first<OwnerApproval>();
 }
 
+/** 取某目标 FQDN 的全部非折叠审批记录（用于删除子域时联动折叠 + 通知二级持有人） */
+export async function getApprovalsByTargetFqdn(
+  env: Env,
+  targetFqdn: string,
+): Promise<OwnerApproval[]> {
+  const res = await env.DB.prepare(
+    `SELECT * FROM owner_approvals WHERE target_fqdn = ? AND status != 'deleted'
+       ORDER BY created_at DESC, id DESC`,
+  )
+    .bind(targetFqdn)
+    .all<OwnerApproval>();
+  return res.results;
+}
+
 export async function setOwnerApprovalStatus(
   env: Env,
   id: number,
-  status: "approved" | "rejected" | "expired",
+  status: "approved" | "rejected" | "expired" | "deleted",
 ): Promise<void> {
   await env.DB.prepare(
     `UPDATE owner_approvals SET status = ?, decided_at = datetime('now') WHERE id = ?`,

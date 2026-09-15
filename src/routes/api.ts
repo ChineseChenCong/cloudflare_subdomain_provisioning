@@ -44,6 +44,8 @@ import {
   getOwnerApprovalById,
   getOwnerApprovalsByApplicant,
   getOwnerApprovalsByApprover,
+  getApprovalsByTargetFqdn,
+  setOwnerApprovalStatus,
 } from "../db/queries";
 import { mirrorSyncRow } from "../services/mirror";
 import {
@@ -72,6 +74,7 @@ import {
   buildDeletionNoticeEmail,
   buildUserDeletedAdminEmail,
   buildOwnerApprovalRequestEmail,
+  buildApprovedSubdomainRemovedToApproverEmail,
 } from "../services/email";
 
 type Variables = { user: User };
@@ -460,6 +463,13 @@ api.delete("/subdomains/:id", async (c) => {
   // write-through：镜像侧删除该行（best-effort，失败静默，日级 cron 回补）
   await mirrorSyncRow(c.env, "subdomains", id).catch(() => {});
 
+  // 已审批赋予他人的子域被删除 → 折叠关联审批记录 + 通知二级域名持有人（父级拥有者）
+  await foldApprovalAndNotify(
+    c,
+    `${subdomain.subdomain}.${subdomain.domain}`,
+    "该子域持有人（获准使用人）",
+  ).catch(() => {});
+
   // 通知管理员：用户已删除该子域名及其 DNS 解析
   try {
     const url = new URL(c.req.url);
@@ -487,6 +497,52 @@ api.delete("/subdomains/:id", async (c) => {
 
   return c.json({ success: true });
 });
+
+/**
+ * 删除已审批赋予他人的子域时联动：折叠关联审批记录（置 status='deleted'，
+ * 前端「已处理」区自动隐藏该记录，保留审计）+ 邮件通知二级域名持有人（父级拥有者/审批人）。
+ * 非被审批子域（owner_approvals 无记录）时是 no-op，不影响普通删除。
+ */
+async function foldApprovalAndNotify(
+  c: Context<{ Bindings: Env; Variables: Variables }>,
+  fqdn: string,
+  removedBy: string,
+): Promise<void> {
+  try {
+    const approvals = await getApprovalsByTargetFqdn(c.env, fqdn);
+    if (approvals.length === 0) return;
+    const active = approvals.find(
+      (a) => a.status === "approved" || a.status === "pending",
+    );
+    // 折叠：把关联审批记录置 deleted（保留审计，前端「已处理」区自动隐藏）
+    for (const a of approvals) {
+      if (a.status === "approved" || a.status === "pending") {
+        await setOwnerApprovalStatus(c.env, a.id, "deleted");
+      }
+    }
+    // 通知二级域名持有人 = 父级拥有者（审批人）
+    if (!active) return;
+    const approver = await findUserById(c.env, active.approver_user_id);
+    if (!approver?.email) return;
+    const siteName = c.env.SITE_NAME || "SubDomain Hub";
+    const url = new URL(c.req.url);
+    const email = buildApprovedSubdomainRemovedToApproverEmail(
+      approver.github_username,
+      fqdn,
+      active.base_fqdn,
+      removedBy,
+      siteName,
+      url.origin,
+    );
+    email.to = approver.email;
+    email.toName = approver.github_username;
+    await sendEmail(c.env, email).catch(() => {});
+  } catch (err) {
+    console.error(
+      `[audit] foldApprovalAndNotify error: ${(err as Error).message}`,
+    );
+  }
+}
 
 // ==================== DNS 记录管理 ====================
 
@@ -982,6 +1038,13 @@ api.delete("/admin/subdomains/:id", adminMiddleware, async (c) => {
 
   // write-through：镜像侧删除该行（best-effort，失败静默，日级 cron 回补）
   await mirrorSyncRow(c.env, "subdomains", id).catch(() => {});
+
+  // 已审批赋予他人的子域被删除 → 折叠关联审批记录 + 通知二级域名持有人（父级拥有者）
+  await foldApprovalAndNotify(
+    c,
+    `${subdomain.subdomain}.${subdomain.domain}`,
+    "管理员",
+  ).catch(() => {});
 
   // 邮件通知该子域名所属用户（含删除理由）
   try {
