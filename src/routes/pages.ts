@@ -404,15 +404,15 @@ function renderPage({
       const next = cur < pages ? cur + 1 : pages;
       let c = '<div class="pager" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-top:14px">';
       c += '<label style="font-size:13px;color:var(--text-muted);display:flex;align-items:center;gap:6px">每页 ' +
-        '<select class="form-select" style="width:auto;padding:4px 26px 4px 10px;font-size:12px" onchange="setApprPer(\'' + sec + '\',parseInt(this.value))">' +
+        '<select class="form-select" style="width:auto;padding:4px 26px 4px 10px;font-size:12px" onchange="setApprPer(\\'' + sec + '\\',parseInt(this.value))">' +
         [5,10,20,50].map(function (n) { return '<option value="'+n+'"'+(per===n?' selected':'')+'>'+n+' 条</option>'; }).join('') +
         '</select></label>';
       c += '<div style="display:flex;align-items:center;gap:6px">' +
-        '<button class="btn btn-sm btn-secondary" onclick="setApprPage(\'' + sec + '\',1)"'+(cur<=1?' disabled':'')+'>«</button>' +
-        '<button class="btn btn-sm btn-secondary" onclick="setApprPage(\'' + sec + '\','+prev+')"'+(cur<=1?' disabled':'')+'>‹</button>' +
+        '<button class="btn btn-sm btn-secondary" onclick="setApprPage(\\'' + sec + '\\',1)"'+(cur<=1?' disabled':'')+'>«</button>' +
+        '<button class="btn btn-sm btn-secondary" onclick="setApprPage(\\'' + sec + '\\','+prev+')"'+(cur<=1?' disabled':'')+'>‹</button>' +
         '<span style="font-size:13px;color:var(--text-primary);min-width:64px;text-align:center">' + cur + ' / ' + pages + '</span>' +
-        '<button class="btn btn-sm btn-secondary" onclick="setApprPage(\'' + sec + '\','+next+')"'+(cur>=pages?' disabled':'')+'>›</button>' +
-        '<button class="btn btn-sm btn-secondary" onclick="setApprPage(\'' + sec + '\','+pages+')"'+(cur>=pages?' disabled':'')+'>»</button>' +
+        '<button class="btn btn-sm btn-secondary" onclick="setApprPage(\\'' + sec + '\\','+next+')"'+(cur>=pages?' disabled':'')+'>›</button>' +
+        '<button class="btn btn-sm btn-secondary" onclick="setApprPage(\\'' + sec + '\\','+pages+')"'+(cur>=pages?' disabled':'')+'>»</button>' +
         '</div></div>';
       return c;
     }
