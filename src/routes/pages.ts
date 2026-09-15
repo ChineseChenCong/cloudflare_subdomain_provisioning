@@ -717,7 +717,7 @@ function renderPage({
               :'<span class="proxy-indicator direct">直接</span>')+'</td>' +
             '<td><div class="proxied-toggle ' + (r.proxied ? 'active' : '') + '" onclick="toggleProxied(\\'' + state.currentSubdomain + '\\',\\'' + r.id + '\\', ' + r.proxied + ')" title="切换代理状态"></div></td>' +
             '<td><div style="display:flex;gap:4px">' +
-            '<button class="btn btn-ghost btn-sm" onclick="editRecord(\''+r.id+'\')" title="编辑" style="display:flex">' + icons.edit + '</button>' +
+            '<button class="btn btn-ghost btn-sm" onclick="editRecord(\\''+r.id+'\\')" title="编辑" style="display:flex">' + icons.edit + '</button>' +
             '<button class="btn btn-ghost btn-sm" onclick="deleteRecordConfirm(\\''+r.id+'\\',\\''+escapeHtml(r.name)+'\\',\\''+escapeHtml(r.record_type)+'\\')" title="删除" style="display:flex">' + icons.trash + '</button>' +
             '</div></td></tr>';
         });
