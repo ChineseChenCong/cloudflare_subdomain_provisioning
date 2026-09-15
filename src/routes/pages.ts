@@ -1096,6 +1096,16 @@ function renderPage({
       .features { grid-template-columns: 1fr; }
       .form-row, .form-row-3 { grid-template-columns: 1fr; }
       .form-row > *, .form-row-3 > * { width: 100%; max-width: 100%; }
+      /* 申请子域表单：移动端纵向排布，后缀下拉不遮挡输入框、不横向溢出 */
+      .form-inline { flex-direction: column; align-items: stretch; gap: 10px; }
+      .form-inline > .form-group { width: 100%; max-width: 100%; margin-bottom: 0; }
+      .form-inline > .btn, .form-inline > button { width: 100%; align-self: stretch; margin-bottom: 8px; }
+      .subdomain-input-group { width: 100%; min-width: 0; }
+      .subdomain-input-group .form-input { flex: 1 1 auto; min-width: 0; text-align: left; }
+      .subdomain-input-group .domain-suffix {
+        flex: 0 0 auto; max-width: 48%; min-width: 0; margin-left: 0;
+        overflow: hidden;
+      }
       .subdomain-card { 
         flex-direction: column; 
         gap: 16px; 
