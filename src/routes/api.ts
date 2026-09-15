@@ -9,6 +9,8 @@ import {
   getMaxSubdomains,
   getMaxRecords,
   getZoneIdForDomain,
+  isDnsLiveRead,
+  getOwnerApprovalDeadlineHours,
 } from '../config';
 import {
   getUserSubdomains,
@@ -21,6 +23,7 @@ import {
   countSubdomainRecords,
   createDnsRecordEntry,
   getDnsRecordById,
+  getDnsRecordByCfId,
   updateDnsRecordEntry,
   deleteDnsRecordEntry,
   deleteAllRecordsForSubdomain,
@@ -30,11 +33,27 @@ import {
   rejectSubdomain,
   getPendingSubdomains,
   findUserById,
+  createOwnerApproval,
+  getPendingApprovalByTarget,
+  findApprovedOwnedAncestor,
+  enumerateAncestorFqdns,
+  getOwnerApprovalById,
+  getOwnerApprovalsByApplicant,
+  getOwnerApprovalsByApprover,
 } from '../db/queries';
+import {
+  approveOwnerApproval,
+  rejectOwnerApproval,
+  expireOwnerApproval,
+  isOwnerApprovalExpired,
+} from '../services/owner-approval';
 import {
   createDnsRecord as cfCreateDnsRecord,
   updateDnsRecord as cfUpdateDnsRecord,
   deleteDnsRecord as cfDeleteDnsRecord,
+  listAllZoneRecords as cfListAllZoneRecords,
+  hasDnsRecordsForFqdn as cfHasDnsRecordsForFqdn,
+  deleteDnsRecordsByFqdn as cfDeleteDnsRecordsByFqdn,
 } from '../services/cloudflare';
 import {
   getActiveAccounts,
@@ -45,6 +64,9 @@ import {
   buildApprovalEmail,
   buildRejectionEmail,
   buildNewRequestNotifyEmail,
+  buildDeletionNoticeEmail,
+  buildUserDeletedAdminEmail,
+  buildOwnerApprovalRequestEmail,
 } from '../services/email';
 
 type Variables = { user: User };
@@ -147,13 +169,94 @@ api.post('/subdomains', async (c) => {
     return c.json({ error: `您已达到子域名数量上限 (${maxSubs})` }, 400);
   }
 
-  // 检查子域名是否已被占用
+  // 检查子域名是否已被占用（本系统数据库）
   const existing = await findSubdomain(c.env.DB, subdomainLower, domain);
   if (existing) {
     return c.json({ error: '该子域名已被注册' }, 409);
   }
 
-  // 创建子域名（状态为 pending）
+  // —— 递归占用拦截 + 上级所有权审批 ——
+  const fqdn = `${subdomainLower}.${domain}`;
+  // 目标 fqdn 的所有“真祖先”（不含自身）。例：d.c.b.example.org → [b.example.org, c.b.example.org]
+  const ancestors = enumerateAncestorFqdns(fqdn, domain);
+
+  // 占用拦截（递归）：目标 fqdn 及其每一级祖先整条链上，任一层在 CF 已有解析配置
+  // → 该链之下的任意深度都不允许再申请（保护既有的层级使用权，逐级类推）。
+  // CF 查询失败则回退仅按 DB 判断。
+  try {
+    const acc = await resolveCfAccount(c, domain);
+    if (!acc.error) {
+      const chain = [fqdn, ...ancestors];
+      for (const cand of chain) {
+        if (await cfHasDnsRecordsForFqdn(acc.token, acc.zoneId, cand)) {
+          return c.json(
+            { error: `子域名链 ${cand} 名下已存在 DNS 解析配置（该层或更上层已被占用），不允许在其下申请`, code: 'occupied-chain' },
+            409
+          );
+        }
+      }
+    }
+  } catch (err) {
+    console.error(`[audit] CF DNS occupation check failed: ${(err as Error).message}`);
+  }
+
+  // 上级所有权审批：目标子域名存在“被拥有的真祖先”（某层已被批准），且该祖先不属于申请人本人
+  // → 由最近被拥有的祖先的所有者审批（邮件含同意/驳回按钮，超时自动驳回），通过后才正式建立。
+  // 若最近被拥有的祖先即申请人本人所有（即“拥有二级域名者可申请其下三级”）→ 无需外部同意，走正常流程。
+  if (ancestors.length > 0) {
+    const ownerAnc = await findApprovedOwnedAncestor(c.env.DB, ancestors);
+    if (ownerAnc && ownerAnc.user_id !== user.id) {
+      // 幂等：同一目标 fqdn 已有待审批申请时直接提示，不重复发邮件
+      const existing = await getPendingApprovalByTarget(c.env.DB, fqdn);
+      if (existing) {
+        return c.json(
+          { error: `该子域名使用权归 ${ownerAnc.subdomain}.${ownerAnc.domain} 所有者所有，审批请求已发送，请等待其处理`, code: 'pending-owner-approval' },
+          409
+        );
+      }
+      const owner = await findUserById(c.env.DB, ownerAnc.user_id);
+      const token =
+        crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().replace(/-/g, '');
+      const hours = getOwnerApprovalDeadlineHours(c.env);
+      const deadline = new Date(Date.now() + hours * 3600_000).toISOString();
+      await createOwnerApproval(c.env.DB, {
+        targetFqdn: fqdn,
+        baseFqdn: `${ownerAnc.subdomain}.${ownerAnc.domain}`,
+        approverUserId: ownerAnc.user_id,
+        applicantUserId: user.id,
+        token,
+        deadlineAt: deadline,
+      });
+      if (owner?.email) {
+        const url = new URL(c.req.url);
+        const siteName = c.env.SITE_NAME || 'Sub Domain Hub';
+        const approveUrl = `${url.origin}/decide-approval?token=${token}&action=approve`;
+        const rejectUrl = `${url.origin}/decide-approval?token=${token}&action=reject`;
+        const mail = buildOwnerApprovalRequestEmail(
+          owner.github_username,
+          user.github_username,
+          fqdn,
+          `${ownerAnc.subdomain}.${ownerAnc.domain}`,
+          approveUrl,
+          rejectUrl,
+          hours,
+          siteName,
+          url.origin
+        );
+        mail.to = owner.email;
+        await sendEmail(c.env, mail).catch(() => {});
+      }
+      return c.json(
+        {
+          message: `该子域名使用权归 ${ownerAnc.subdomain}.${ownerAnc.domain} 所有者所有，需其同意；审批请求已发送，${hours} 小时内未处理将自动驳回`,
+          code: 'owner-approval-requested',
+        },
+        201
+      );
+    }
+  }
+
+  // 无上级所有者（或申请人本人即上层所有者）→ 直接创建子域名（状态为 pending，走管理员审核）
   const newSubdomain = await createSubdomain(c.env.DB, user.id, subdomainLower, domain);
 
   // 尝试通知管理员
@@ -189,6 +292,60 @@ api.post('/subdomains', async (c) => {
   }, 201);
 });
 
+// ==================== 上级所有权审批（前端待审批面板） ====================
+// 普通用户入口：GET 我的待审批列表（含我发起的请求 + 我作为所有权者待处理/已处理的请求）。
+// POST approve/reject 由当前登录用户作为审批人执行；超时请求在前端显示为由系统按超时自动驳回，
+// 此处再次以服务端时间为准校验（与邮件链接 /decide-approval 行为一致）。
+api.get('/owner-approvals', async (c) => {
+  const user = c.get('user');
+  const requester = await getOwnerApprovalsByApplicant(c.env.DB, user.id);
+  const approver = await getOwnerApprovalsByApprover(c.env.DB, user.id);
+  // 附带申请人/审批人用户名，前端面板直接展示（同库内小量 N+1，可接受）
+  const requesterRows = requester.map((a) => ({ ...a, applicant_github_name: user.github_username }));
+  const approverRows: Array<Record<string, unknown>> = [];
+  for (const a of approver) {
+    const applicant = await findUserById(c.env.DB, a.applicant_user_id);
+    approverRows.push({ ...a, applicant_github_name: applicant?.github_username || `用户#${a.applicant_user_id}` });
+  }
+  return c.json({ requester: requesterRows, approver: approverRows });
+});
+
+// 前端面板的「同意」——仅审批人本人可操作
+api.post('/owner-approvals/:id/approve', async (c) => {
+  const user = c.get('user');
+  const id = parseInt(c.req.param('id'), 10);
+  const approval = await getOwnerApprovalById(c.env.DB, id);
+  if (!approval) return c.json({ error: '该审批请求不存在' }, 404);
+  if (approval.approver_user_id !== user.id) return c.json({ error: '您不是该请求的审批人' }, 403);
+  if ((approval.status as string) !== 'pending') return c.json({ error: '该请求已被处理' }, 409);
+  if (isOwnerApprovalExpired(approval)) {
+    await expireOwnerApproval(c.env, approval, new URL(c.req.url).origin);
+    return c.json({ error: '该请求已超时，已自动驳回' }, 409);
+  }
+  const r = await approveOwnerApproval(c.env, approval, new URL(c.req.url).origin);
+  return c.json(
+    r.dupe
+      ? { message: '子域名已存在，审批已标记为同意' }
+      : { message: '已同意，子域名已开通并纳入您的审批' }
+  );
+});
+
+// 前端面板的「驳回」——仅审批人本人可操作
+api.post('/owner-approvals/:id/reject', async (c) => {
+  const user = c.get('user');
+  const id = parseInt(c.req.param('id'), 10);
+  const approval = await getOwnerApprovalById(c.env.DB, id);
+  if (!approval) return c.json({ error: '该审批请求不存在' }, 404);
+  if (approval.approver_user_id !== user.id) return c.json({ error: '您不是该请求的审批人' }, 403);
+  if ((approval.status as string) !== 'pending') return c.json({ error: '该请求已被处理' }, 409);
+  if (isOwnerApprovalExpired(approval)) {
+    await expireOwnerApproval(c.env, approval, new URL(c.req.url).origin);
+    return c.json({ error: '该请求已超时，已自动驳回' }, 409);
+  }
+  await rejectOwnerApproval(c.env, approval, new URL(c.req.url).origin);
+  return c.json({ message: '已驳回该申请' });
+});
+
 // 删除子域名
 api.delete('/subdomains/:id', async (c) => {
   const user = c.get('user');
@@ -203,26 +360,103 @@ api.delete('/subdomains/:id', async (c) => {
     return c.json({ error: '无权操作此子域名' }, 403);
   }
 
-  // 如果已审核通过，先删除所有 Cloudflare DNS 记录
+  // 已审核通过：先精确回收该子域名名下全部 DNS 解析（只限本 FQDN，绝不误删他人项目）
+  // 目的：删除权限的同时确保解析一并失效，不会出现“权限已删但解析仍生效”的残留。
   if (subdomain.status === 'approved') {
     const acc = await resolveCfAccount(c, subdomain.domain);
-    if (!acc.error) {
-      const records = await deleteAllRecordsForSubdomain(c.env.DB, subdomain.id);
-      for (const record of records) {
-        try {
-          await cfDeleteDnsRecord(acc.token, acc.zoneId, record.cf_record_id);
-        } catch (err) {
-          console.error(`Failed to delete CF record ${record.cf_record_id}:`, err);
+    if (acc.error) {
+      console.error(`[audit] delete: cannot resolve CF account for ${subdomain.domain}: ${acc.error}`);
+    } else {
+      try {
+        await cfDeleteDnsRecordsByFqdn(acc.token, acc.zoneId, `${subdomain.subdomain}.${subdomain.domain}`);
+      } catch (err) {
+        // CF 实时整组删除失败 → 回退按 DB 记录逐个删除，尽量回收
+        console.error(`[audit] delete: CF fqdn cleanup failed: ${(err as Error).message}, fallback to DB`);
+        const records = await deleteAllRecordsForSubdomain(c.env.DB, subdomain.id);
+        for (const record of records) {
+          try {
+            await cfDeleteDnsRecord(acc.token, acc.zoneId, record.cf_record_id);
+          } catch (e) {
+            console.error(`Failed to delete CF record ${record.cf_record_id}:`, e);
+          }
         }
       }
+      // 无论成败都清空 DB 记录缓存（子域名删除本身有级联，此处显式清理使权限即时失效）
+      await deleteAllRecordsForSubdomain(c.env.DB, subdomain.id);
     }
   }
 
   await deleteSubdomain(c.env.DB, id);
+
+  // 通知管理员：用户已删除该子域名及其 DNS 解析
+  try {
+    const url = new URL(c.req.url);
+    const siteName = c.env.SITE_NAME || 'SubDomain Hub';
+    const notifyAdmin = buildUserDeletedAdminEmail(
+      user.github_username,
+      subdomain.subdomain,
+      subdomain.domain,
+      siteName,
+      url.origin
+    );
+    const admins = await getAllUsers(c.env.DB);
+    const adminsWithEmail = admins.filter((u) => u.is_admin && u.email);
+    for (const admin of adminsWithEmail) {
+      notifyAdmin.to = admin.email!;
+      await sendEmail(c.env, notifyAdmin).catch(() => {});
+    }
+    if (adminsWithEmail.length === 0 && c.env.ADMIN_CONTACT_EMAIL) {
+      notifyAdmin.to = c.env.ADMIN_CONTACT_EMAIL;
+      await sendEmail(c.env, notifyAdmin).catch(() => {});
+    }
+  } catch {
+    // 通知失败不影响删除主流程
+  }
+
   return c.json({ success: true });
 });
 
 // ==================== DNS 记录管理 ====================
+
+/**
+ * DNS 记录读取：开启 `DNS_LIVE_READ` 时优先从 Cloudflare 实时查（节省 D1 读额度），
+ * 任何 CF 查询失败自动回退 D1；返回的记录 `id` 即 CF 记录 id（写/删以 CF id 定位）。
+ */
+async function readRecordsForSubdomain(
+  c: Context<{ Bindings: Env; Variables: Variables }>,
+  subdomainId: number,
+  fullName: string
+): Promise<any[]> {
+  if (!isDnsLiveRead(c.env)) {
+    return getSubdomainRecords(c.env.DB, subdomainId);
+  }
+  const dotIndex = fullName.indexOf('.');
+  const domain = dotIndex >= 0 ? fullName.slice(dotIndex + 1) : fullName;
+  const acc = await resolveCfAccount(c, domain);
+  if (acc.error) {
+    return getSubdomainRecords(c.env.DB, subdomainId);
+  }
+  try {
+    const zoneRecords = await cfListAllZoneRecords(acc.token, acc.zoneId);
+    const prefix = fullName + '.';
+    return zoneRecords
+      .filter((r) => r.name === fullName || r.name.endsWith(prefix))
+      .map((r) => ({
+        id: r.id,
+        cf_record_id: r.id,
+        record_type: r.type,
+        name: r.name,
+        content: r.content,
+        ttl: r.ttl,
+        priority: r.priority ?? null,
+        proxied: r.proxied,
+        comment: r.comment ?? null,
+      }));
+  } catch (err) {
+    console.error(`[audit] DNS live read failed, fallback to DB: ${(err as Error).message}`);
+    return getSubdomainRecords(c.env.DB, subdomainId);
+  }
+}
 
 // 获取子域名的 DNS 记录
 api.get('/subdomains/:id/records', async (c) => {
@@ -242,10 +476,11 @@ api.get('/subdomains/:id/records', async (c) => {
     return c.json({ error: '子域名尚未通过审核，无法管理 DNS 记录' }, 403);
   }
 
-  const records = await getSubdomainRecords(c.env.DB, subdomain.id);
+  const fullName = `${subdomain.subdomain}.${subdomain.domain}`;
+  const records = await readRecordsForSubdomain(c, subdomain.id, fullName);
   return c.json({
     records,
-    subdomain: `${subdomain.subdomain}.${subdomain.domain}`,
+    subdomain: fullName,
     max_records: getMaxRecords(c.env),
     current_count: records.length,
   });
@@ -364,7 +599,7 @@ api.post('/subdomains/:id/records', async (c) => {
 api.put('/subdomains/:id/records/:recordId', async (c) => {
   const user = c.get('user');
   const subId = parseInt(c.req.param('id'), 10);
-  const recordId = parseInt(c.req.param('recordId'), 10);
+  const recordIdRaw = c.req.param('recordId');
   const body = await c.req.json<DnsRecordInput>();
 
   const subdomain = await getSubdomainById(c.env.DB, subId);
@@ -380,7 +615,9 @@ api.put('/subdomains/:id/records/:recordId', async (c) => {
     return c.json({ error: '子域名尚未通过审核' }, 403);
   }
 
-  const existingRecord = await getDnsRecordById(c.env.DB, recordId);
+  const existingRecord = isDnsLiveRead(c.env)
+    ? await getDnsRecordByCfId(c.env.DB, subdomain.id, recordIdRaw)
+    : await getDnsRecordById(c.env.DB, parseInt(recordIdRaw, 10));
   if (!existingRecord || existingRecord.subdomain_id !== subdomain.id) {
     return c.json({ error: 'DNS 记录不存在' }, 404);
   }
@@ -419,7 +656,7 @@ api.put('/subdomains/:id/records/:recordId', async (c) => {
 
     await updateDnsRecordEntry(
       c.env.DB,
-      recordId,
+      existingRecord.id,
       cfRecord.id,
       body.type,
       body.name || '@',
@@ -430,7 +667,7 @@ api.put('/subdomains/:id/records/:recordId', async (c) => {
       body.comment ?? null
     );
 
-    const updated = await getDnsRecordById(c.env.DB, recordId);
+    const updated = await getDnsRecordById(c.env.DB, existingRecord.id);
     return c.json({ record: updated });
   } catch (err: any) {
     return c.json({ error: `更新 DNS 记录失败: ${err.message}` }, 500);
@@ -441,7 +678,7 @@ api.put('/subdomains/:id/records/:recordId', async (c) => {
 api.delete('/subdomains/:id/records/:recordId', async (c) => {
   const user = c.get('user');
   const subId = parseInt(c.req.param('id'), 10);
-  const recordId = parseInt(c.req.param('recordId'), 10);
+  const recordIdRaw = c.req.param('recordId');
 
   const subdomain = await getSubdomainById(c.env.DB, subId);
   if (!subdomain) {
@@ -452,7 +689,9 @@ api.delete('/subdomains/:id/records/:recordId', async (c) => {
     return c.json({ error: '无权操作此子域名' }, 403);
   }
 
-  const record = await getDnsRecordById(c.env.DB, recordId);
+  const record = isDnsLiveRead(c.env)
+    ? await getDnsRecordByCfId(c.env.DB, subdomain.id, recordIdRaw)
+    : await getDnsRecordById(c.env.DB, parseInt(recordIdRaw, 10));
   if (!record || record.subdomain_id !== subdomain.id) {
     return c.json({ error: 'DNS 记录不存在' }, 404);
   }
@@ -468,7 +707,7 @@ api.delete('/subdomains/:id/records/:recordId', async (c) => {
     console.error(`Failed to delete CF record:`, err);
   }
 
-  await deleteDnsRecordEntry(c.env.DB, recordId);
+  await deleteDnsRecordEntry(c.env.DB, record.id);
   return c.json({ success: true });
 });
 
@@ -577,27 +816,71 @@ api.post('/admin/subdomains/:id/reject', adminMiddleware, async (c) => {
 api.delete('/admin/subdomains/:id', adminMiddleware, async (c) => {
   const id = parseInt(c.req.param('id') || '0', 10);
 
+  // 读取可选删除理由（DELETE 可携 JSON body，前端可填理由）
+  let reason = '';
+  const ct = c.req.header('content-type') || '';
+  if (ct.toLowerCase().includes('application/json')) {
+    try {
+      const b = (await c.req.json()) as { reason?: string };
+      reason = (b.reason || '').trim();
+    } catch {
+      // 无 body 或解析失败则不填理由
+    }
+  }
+
   const subdomain = await getSubdomainById(c.env.DB, id);
   if (!subdomain) {
     return c.json({ error: '子域名不存在' }, 404);
   }
 
+  // 精确回收该子域名名下全部 DNS 解析（只限本 FQDN，不误删他人项目）。
+  // 目的：移除权限的同时一并撤销解析，防止“删除后解析仍生效”。
   if (subdomain.status === 'approved') {
     const acc = await resolveCfAccount(c, subdomain.domain);
-    if (!acc.error) {
-      const records = await deleteAllRecordsForSubdomain(c.env.DB, subdomain.id);
-      for (const record of records) {
-        try {
-          await cfDeleteDnsRecord(acc.token, acc.zoneId, record.cf_record_id);
-        } catch (err) {
-          console.error(`Failed to delete CF record ${record.cf_record_id}:`, err);
+    if (acc.error) {
+      console.error(`[audit] admin delete: cannot resolve CF account for ${subdomain.domain}: ${acc.error}`);
+    } else {
+      try {
+        await cfDeleteDnsRecordsByFqdn(acc.token, acc.zoneId, `${subdomain.subdomain}.${subdomain.domain}`);
+      } catch (err) {
+        console.error(`[audit] admin delete: CF fqdn cleanup failed: ${(err as Error).message}, fallback to DB`);
+        const records = await deleteAllRecordsForSubdomain(c.env.DB, subdomain.id);
+        for (const record of records) {
+          try {
+            await cfDeleteDnsRecord(acc.token, acc.zoneId, record.cf_record_id);
+          } catch (e) {
+            console.error(`Failed to delete CF record ${record.cf_record_id}:`, e);
+          }
         }
       }
+      await deleteAllRecordsForSubdomain(c.env.DB, subdomain.id);
     }
   }
 
   await deleteSubdomain(c.env.DB, id);
-  return c.json({ success: true });
+
+  // 邮件通知该子域名所属用户（含删除理由）
+  try {
+    const owner = await findUserById(c.env.DB, subdomain.user_id);
+    if (owner?.email) {
+      const url = new URL(c.req.url);
+      const siteName = c.env.SITE_NAME || 'SubDomain Hub';
+      const email = buildDeletionNoticeEmail(
+        subdomain.subdomain,
+        subdomain.domain,
+        reason || '管理员未填写原因',
+        siteName,
+        url.origin
+      );
+      email.to = owner.email;
+      email.toName = owner.github_username;
+      await sendEmail(c.env, email).catch(() => {});
+    }
+  } catch {
+    // 通知失败不影响删除主流程
+  }
+
+  return c.json({ success: true, reason: reason || null });
 });
 
 export default api;

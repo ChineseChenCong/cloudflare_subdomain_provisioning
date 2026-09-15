@@ -63,7 +63,7 @@ function renderPage({
   // 且访客只接本站、外部源站只接 Worker（保源站安全）。
   const proxyUrl = (u?: string | null) => (u ? `/assets?src=${encodeURIComponent(u)}` : '');
   const bgStyle = backgroundImage
-    ? `background-image: url('${backgroundImage}'); background-size: cover; background-position: center; background-attachment: fixed;`
+    ? `background-image: url('${proxyUrl(backgroundImage)}'); background-size: cover; background-position: center; background-attachment: fixed;`
     : '';
 
   const overlayStyle = backgroundImage
@@ -82,6 +82,7 @@ function renderPage({
   ${raw(siteLogo
     ? `<link rel="icon" href="${proxyUrl(siteLogo)}" type="image/png">`
     : `<link rel="icon" href="data:image/svg+xml;base64,${btoa(defaultLogoSvg)}">`)}
+  ${raw(`<link rel="shortcut icon" href="/favicon.ico">`)}
   ${raw(`<link rel="apple-touch-icon" href="${proxyUrl(siteLogo) || `data:image/svg+xml;base64,${btoa(defaultLogoSvg)}`}">`)}
   <style>
     :root {
@@ -1094,14 +1095,77 @@ function renderPage({
       .hero h1 { font-size: 36px; }
       .features { grid-template-columns: 1fr; }
       .form-row, .form-row-3 { grid-template-columns: 1fr; }
+      .form-row > *, .form-row-3 > * { width: 100%; max-width: 100%; }
       .subdomain-card { 
         flex-direction: column; 
         gap: 16px; 
         align-items: flex-start; 
       }
-      .user-name { display: none; }
       .section-title { font-size: 20px; }
+
+      /* 用户名：移动端也显示，单行省略限宽，不隐藏、不撑破 */
+      .user-name { 
+        display: inline-block; 
+        max-width: 130px; 
+        overflow: hidden; 
+        text-overflow: ellipsis; 
+        white-space: nowrap; 
+        vertical-align: middle; 
+      }
+      /* 顶部导航/用户区允许换行、不溢出挤压 */
+      .user-info, .nav-bar, .top-bar, .navbar { flex-wrap: wrap; overflow: hidden; min-width: 0; }
+      /* 全局防横向滚动/框被遮挡：容器撑满并在内部滚动 */
+      body { overflow-x: hidden; }
+      .container, .main-wrap, .page, main, .dashboard-wrap { 
+        width: 100%; 
+        max-width: 100%; 
+        padding-left: 12px; 
+        padding-right: 12px; 
+        box-sizing: border-box; 
+      }
+      .card, .panel, .box, .form-container, .table-wrap, .status-card, .account-card { 
+        width: 100%; 
+        max-width: 100%; 
+        box-sizing: border-box; 
+      }
+      .table-wrap { -webkit-overflow-scrolling: touch; }
+
+      /* ---- 移动端美学与流畅性优化 ---- */
+      html { -webkit-text-size-adjust: 100%; }
+      .hero { padding: 28px 0; }
+      .subdomain-card, .card, .panel, .status-card, .account-card {
+        border-radius: 14px;
+        box-shadow: 0 4px 18px rgba(15, 23, 42, 0.10);
+      }
+      button, .btn, input, select, textarea {
+        font-size: 16px;      /* 防 iOS 输入聚焦自动缩放 */
+        border-radius: 10px;
+      }
+      input, select, textarea { box-sizing: border-box; }
+      .section-title { letter-spacing: 0.2px; }
+
+      /* 触屏点击反馈 + 更顺滑动效（只动 transform/shadow，走 GPU） */
+      .btn, a.btn, .friend-link {
+        transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1),
+                    box-shadow 0.18s ease,
+                    background var(--transition);
+        will-change: transform;
+      }
+      .btn:active, a.btn:active { transform: scale(0.96); }
     }
+
+    /* 尊重「减弱动态效果」系统偏好：动画/过渡切换克制，避免晕动与刺眼 */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.001ms !important;
+        scroll-behavior: auto !important;
+      }
+    }
+
+    /* 全局平滑滚动（锚点/轮播切换更顺滑）——仅在非降动效下生效 */
+    html { scroll-behavior: smooth; }
 
     /* ========== 滚动条 ========== */
     ::-webkit-scrollbar { width: 8px; height: 8px; }
@@ -1636,6 +1700,8 @@ function renderPage({
       // Cloudflare accounts
       accounts: [],
       selectedAccount: null,
+      // 上级所有权审批（前端待审批面板）
+      ownerApprovals: { requester: [], approver: [] },
       // Email verification
       emailVerificationRequired: false,
       allowedEmailDomains: [],
@@ -1778,6 +1844,80 @@ function renderPage({
       } catch (err) { toast(err.message, 'error'); }
     }
 
+    async function loadOwnerApprovals() {
+      try {
+        const data = await api('/owner-approvals');
+        state.ownerApprovals = data || { requester: [], approver: [] };
+      } catch (err) { console.error('Failed to load owner approvals:', err); }
+    }
+
+    // 统一渲染上级审批状态徽标（pending 且已超时 → 按超时显示为已超时）
+    function ownerApprovalMeta(a) {
+      const expired = a.status === 'pending' && a.deadline_at && new Date(a.deadline_at).getTime() < Date.now();
+      const st = expired ? 'expired' : a.status;
+      const map = {
+        pending: '<span class="badge badge-pending">' + icons.pending + ' 待审批</span>',
+        approved: '<span class="badge badge-approved">' + icons.approved + ' 已同意</span>',
+        rejected: '<span class="badge badge-rejected">' + icons.rejected + ' 已驳回</span>',
+        expired: '<span class="badge badge-rejected">' + icons.rejected + ' 已超时</span>',
+      };
+      return { st, badge: map[st] || escapeHtml(a.status) };
+    }
+
+    // 待审批 · 层级子域面板（普通用户：我发起的 + 我作为所有权者待处理的）
+    function renderApprovalsPanel() {
+      const rq = state.ownerApprovals.requester || [];
+      const ap = state.ownerApprovals.approver || [];
+      if (rq.length === 0 && ap.length === 0) return '';
+
+      let h = '<div class="section"><div class="section-header">' +
+        '<h2 class="section-title">待审批 · 层级子域</h2>' +
+        '<span style="font-size:13px;color:var(--text-muted)">' + ap.length + ' 待我处理 · ' + rq.length + ' 我发起的</span></div>';
+
+      if (ap.length > 0) {
+        h += '<div class="card" style="margin-bottom:12px">' +
+          '<div class="record-form-title" style="display:flex;align-items:center;gap:6px;margin-bottom:4px">' + icons.shield + ' 待我审批·上层所有权请求</div>';
+        ap.forEach((a) => {
+          const m = ownerApprovalMeta(a);
+          const dl = a.deadline_at ? new Date(a.deadline_at).toLocaleString('zh-CN') : '';
+          h += '<div class="subdomain-card" style="border-bottom:1px solid var(--border);padding:10px 0">' +
+            '<div class="subdomain-info">' +
+            '<h4>' + escapeHtml(a.target_fqdn) + ' ' + m.badge + '</h4>' +
+            '<p style="margin:2px 0">申请人 ' + escapeHtml(a.applicant_github_name || ('用户#' + a.applicant_user_id)) +
+            ' · 申请位于 <b>' + escapeHtml(a.base_fqdn) + '</b> 之下</p>' +
+            '<p style="font-size:12px;color:var(--text-muted);margin:0">截止 ' + dl + ' · 超时未处理将自动驳回</p>' +
+            '</div><div class="subdomain-actions">' +
+            (m.st === 'pending'
+              ? '<button class="btn btn-primary btn-sm btn-jelly" onclick="decideOwnerApproval(' + a.id + ',\\'approve\\')">同意</button>' +
+                '<button class="btn btn-danger btn-sm" onclick="decideOwnerApproval(' + a.id + ',\\'reject\\')">驳回</button>'
+              : '<span style="font-size:12px;color:var(--text-muted)">已处理</span>') +
+            '</div></div>';
+        });
+        h += '</div>';
+      }
+
+      if (rq.length > 0) {
+        h += '<div class="card">' +
+          '<div class="record-form-title" style="display:flex;align-items:center;gap:6px;margin-bottom:4px">' + icons.pending + ' 我发起的审批申请</div>';
+        rq.forEach((a) => {
+          const m = ownerApprovalMeta(a);
+          const dlTxt = m.st === 'pending'
+            ? '截止 ' + (a.deadline_at ? new Date(a.deadline_at).toLocaleString('zh-CN') : '')
+            : (a.decided_at ? '处理于 ' + new Date(a.decided_at).toLocaleString('zh-CN') : '');
+          h += '<div class="subdomain-card" style="border-bottom:1px solid var(--border);padding:10px 0">' +
+            '<div class="subdomain-info">' +
+            '<h4>' + escapeHtml(a.target_fqdn) + ' ' + m.badge + '</h4>' +
+            '<p style="margin:2px 0">位于 <b>' + escapeHtml(a.base_fqdn) + '</b> 之下 · 需上位所有者同意后开通</p>' +
+            '<p style="font-size:12px;color:var(--text-muted);margin:0">' + dlTxt + '</p>' +
+            '</div><div class="subdomain-actions"></div></div>';
+        });
+        h += '</div>';
+      }
+
+      h += '</div>';
+      return h;
+    }
+
     function renderDashboard() {
       const subs = state.subdomains;
       const activeSubs = subs.filter(s => s.status !== 'rejected');
@@ -1850,8 +1990,23 @@ function renderPage({
         });
       }
 
+      h += renderApprovalsPanel();
+
       h += '</div></div>';
       return h;
+    }
+
+    // 前端面板的「同意/驳回」操作（仅审批人本人可操作，后端校验）
+    function decideOwnerApproval(id, action) {
+      const label = action === 'approve' ? '同意' : '驳回';
+      showModal('上级所有权审批', '确定要' + label + '该层级子域名申请吗？', async () => {
+        try {
+          const res = await api('/owner-approvals/' + id + '/' + action, { method: 'POST' });
+          toast(res.message || (action === 'approve' ? '已同意并开通' : '已驳回'), 'success');
+          await loadOwnerApprovals();
+          render();
+        } catch (err) { toast(err.message, 'error'); }
+      });
     }
 
     async function registerSubdomain() {
@@ -2653,6 +2808,10 @@ function renderPage({
           // 加载账户列表
           try { await loadAccounts(); }
           catch (err) { console.error('Failed to load accounts:', err); }
+
+          // 加载上级所有权审批（待审批面板）
+          try { await loadOwnerApprovals(); }
+          catch (err) { console.error('Failed to load owner approvals:', err); }
 
           if (state.user.is_admin) {
             try { loadAdminData(); }

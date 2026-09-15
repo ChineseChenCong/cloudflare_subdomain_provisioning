@@ -9,6 +9,10 @@ export interface Env {
   MAX_SUBDOMAINS_PER_USER: string;
   MAX_RECORDS_PER_SUBDOMAIN: string;
   ADMIN_USERS?: string;
+  // DNS 记录读取来源：'true'/'1' 时优先从 Cloudflare 实时查（读少用 D1），CF 失败回退 DB
+  DNS_LIVE_READ?: string;
+  // 上级所有权审批超时（小时），超时未处理自动驳回；默认 72
+  OWNER_APPROVAL_DEADLINE_HOURS?: string;
   SITE_NAME: string;
   // 站点背景图与 Logo（可选）
   SITE_BACKGROUND_IMAGE?: string;
@@ -37,6 +41,24 @@ export interface Env {
   RESEND_API_KEY?: string;
   // 每用户每天最大邮件发送数（默认 5）
   EMAIL_DAILY_EMAIL_LIMIT?: string;
+  // ---- 存储后端链（STORAGE.md）----
+  // 活动查询后端顺序，逗号分隔，越靠前越优先；合法项 mysql / custom-sqlite / d1；缺省 d1（=现状）
+  DB_QUERY_ORDER?: string;
+  // MySQL 经 Cloudflare Hyperdrive（Worker 无法原生 TCP）；形如 mysql://user:pass@host:port/db
+  HYPERDRIVE?: { connectionString: string };
+  // 自定义 SQLite（Turso/libsql over HTTP）
+  CUSTOM_SQLITE_URL?: string;
+  CUSTOM_SQLITE_TOKEN?: string;
+  CUSTOM_SQLITE_JWT?: string;
+  // S3/R2 快照灾备
+  S3_BACKUP_BUCKET?: string;
+  S3_ENDPOINT?: string;
+  S3_REGION?: string;
+  S3_ACCESS_KEY?: string;
+  S3_SECRET_KEY?: string;
+  S3_USE_PATH_STYLE?: string; // 'true' 时用 path-style（兼容 MinIO/R2 自定义端点）
+  // 后端异常时管理告警收件邮箱（复用邮件通道）
+  DB_ADMIN_ALERT_EMAIL?: string;
 }
 
 export interface Announcement {
@@ -55,6 +77,22 @@ export interface FriendLink {
   name: string;
   url: string;
   description?: string;
+}
+
+export type OwnerApprovalStatus = 'pending' | 'approved' | 'rejected' | 'expired';
+
+/** 上级所有权审批请求：申请更深层子域名时，需目标子域名的最近被拥有祖先的所有者同意 */
+export interface OwnerApproval {
+  id: number;
+  target_fqdn: string;       // 目标子域名 FQDN（申请人想要的）
+  base_fqdn: string;         // 最近被拥有的祖先 FQDN（审批人拥有的二级/三级…）
+  approver_user_id: number;  // 审批人（所有权者）
+  applicant_user_id: number; // 申请人
+  token: string;             // 决策令牌（邮件按钮链接用，长随机）
+  status: OwnerApprovalStatus;
+  created_at: string;
+  deadline_at: string;       // 超时未处理自动驳回
+  decided_at: string | null;
 }
 
 export interface User {

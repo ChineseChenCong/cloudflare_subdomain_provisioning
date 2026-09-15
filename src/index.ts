@@ -10,6 +10,21 @@ import verificationRoutes from './routes/verification';
 import proxiedRoutes from './routes/proxied';
 import announcementRoutes from './routes/announcements';
 import { verifyEmailByToken } from './services/email-verification';
+import {
+  getOwnerApprovalByToken,
+  setOwnerApprovalStatus,
+  findUserById,
+  createSubdomain,
+  findSubdomain,
+  approveSubdomain,
+} from './db/queries';
+import { sendEmail } from './services/email';
+import { buildOwnerApprovalResultEmail } from './services/email';
+import {
+  approveOwnerApproval,
+  rejectOwnerApproval,
+  expireOwnerApproval,
+} from './services/owner-approval';
 
 type Variables = { user: User };
 
@@ -102,6 +117,56 @@ app.use('/api/verification/send', async (c, next) => {
   await next();
 });
 
+// ==================== 上级所有权审批决策落地页 ====================
+// 邮件「同意/驳回」按钮链接到该页。逻辑：
+//  - 超时（now > deadline_at）且仍 pending → 自动标 expired（视为自动驳回），不能再操作。
+//  - 已决定 → 显示已决定结果，重复点击不重复生效。
+//  - pending 未超时 → approve：为该目标创建子域名并置为 approved（所有权者已同意）；
+//    reject：标记 rejected。均邮件通知申请人。
+app.get('/decide-approval', async (c) => {
+  const token = (c.req.query('token') || '').trim();
+  const action = (c.req.query('action') || '').trim();
+  const page = (emoji: string, title: string, desc: string, extra?: string) =>
+    c.html(`<!DOCTYPE html><html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>审批结果</title></head><body style="margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:linear-gradient(135deg,#e0eaff,#f8fbff);color:#1e293b;display:flex;align-items:center;justify-content:center;min-height:100vh"><div style="text-align:center;background:#fff;border-radius:16px;box-shadow:0 10px 30px rgba(59,130,246,.15);padding:40px;max-width:420px"><div style="font-size:52px">${emoji}</div><h2 style="margin:16px 0 8px">${title}</h2><p style="color:#64748b;margin:0 0 8px;line-height:1.6">${desc}</p>${extra || ''}<a href="/" style="display:inline-block;margin-top:20px;background:#3b82f6;color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:600">返回首页</a></div></body></html>`);
+
+  if (!token || (action !== 'approve' && action !== 'reject')) {
+    return page('❓', '链接无效', '请从邮件中打开完整链接。');
+  }
+  const approval = await getOwnerApprovalByToken(c.env.DB, token);
+  if (!approval) {
+    return page('❌', '审批请求不存在', '该链接已失效。');
+  }
+  const siteUrl = new URL(c.req.url).origin;
+  const siteName = c.env.SITE_NAME || 'SubDomain Hub';
+
+  // 已决定 → 不再生效，仅提示结果
+  if ((approval.status as string) !== 'pending') {
+    const map: Record<string, { e: string; t: string; d: string }> = {
+      approved: { e: '✅', t: '已同意', d: '该申请已被同意并生效。' },
+      rejected: { e: '⛔', t: '已驳回', d: '该申请已被驳回。' },
+      expired: { e: '⏰', t: '已超时自动驳回', d: '该申请因超时未处理已被自动驳回。' },
+    };
+    const m = map[approval.status] || map.rejected;
+    return page(m.e, m.t, m.d);
+  }
+
+  // 超时自动驳回（pending 且已超时，仅首次生效）
+  if (await expireOwnerApproval(c.env, approval, siteUrl)) {
+    return page('⏰', '审批已超时自动驳回', `${approval.target_fqdn} 因未在时限内处理而被自动驳回。`);
+  }
+
+  if (action === 'reject') {
+    await rejectOwnerApproval(c.env, approval, siteUrl);
+    return page('⛔', '已驳回', `${approval.target_fqdn} 已被驳回，未能开通。`);
+  }
+
+  // approve：创建子域名并置为 approved（所有权者已同意）
+  const r = await approveOwnerApproval(c.env, approval, siteUrl);
+  return r.dupe
+    ? page('⚠️', '已存在同名子域名', `${approval.target_fqdn} 已存在，无需重复开通。`)
+    : page('✅', '已同意', `${approval.target_fqdn} 已开通，申请用户可开始为其配置解析。`);
+});
+
 // ==================== 外链资源代理（本域中转） ====================
 // 外部图片/资源经本站 /assets 转发：HTML 只暴露本站路径、不泄露外链真实域名
 // （防爬虫/扫描发现外链来源）；访客不再直连外部源站，源站只接收 Worker 请求
@@ -121,7 +186,7 @@ app.get('/assets', async (c) => {
   const allowed = ALLOWED_ASSET_HOSTS.some((h) => host === h || host.endsWith('.' + h));
   if (!allowed) return c.json({ error: '资源域名不在白名单' }, 403);
   if (!rateLimit(c, 60_000, 60, 'asset')) return c.json({ error: '请求过于频繁' }, 429);
-  const resp = await fetch(url.toString(), { headers: { 'user-agent': 'R.O.L.-DomainSystem' } });
+  const resp = await fetch(url.toString(), { headers: { 'user-agent': 'SubdomainHub/1.0' } });
   const ct = resp.headers.get('content-type') || 'application/octet-stream';
   return new Response(resp.body, {
     status: resp.status,
@@ -129,6 +194,18 @@ app.get('/assets', async (c) => {
     // 首个访客触发 Worker→源站后，同图在 1 天内再次被请求直接命中 CF 边缘缓存，
     // 不再触发 Worker 执行、不计 Worker 请求数、不耗出站 —— 即“走 CDN 分发不耗 Worker”。
     headers: { 'content-type': ct, 'cache-control': 'public, max-age=86400, s-maxage=86400', 'x-content-type-options': 'nosniff' },
+  });
+});
+
+// 传统 favicon.ico 端点：via 等极简浏览器只请求 /favicon.ico 且仅认 ico/png。
+app.get('/favicon.ico', async (c) => {
+  const logo = c.env.SITE_LOGO as string | undefined;
+  if (!logo) return c.body(null, 204);
+  const resp = await fetch(logo, { headers: { 'user-agent': 'SubdomainHub/1.0' } });
+  if (!resp.ok) return c.body(null, 404);
+  return new Response(resp.body, {
+    status: 200,
+    headers: { 'content-type': 'image/x-icon', 'cache-control': 'public, max-age=86400, s-maxage=86400' },
   });
 });
 

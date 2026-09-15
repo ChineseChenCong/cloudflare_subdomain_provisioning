@@ -11,7 +11,7 @@
 | 项 | 值 |
 |---|---|
 | 上游仓库 | `https://github.com/Little100/cloudflare_subdomain_provisioning` |
-| 本仓库（fork） | `https://github.com/ChineseChenCong/cloudflare_subdomain_provisioning` |
+| 本仓库（fork） | `https://github.com/<fork维护方>/cloudflare_subdomain_provisioning`（fork 地址由维护方自填） |
 | 上游基线 commit | `42e0779`（`upstream/main` HEAD） |
 | 本仓库类型 | 上游之 **fork / 派生修改版本**，非上游原样分发 |
 
@@ -45,7 +45,7 @@
 - `src/services/cloudflare-accounts.ts`（新增）：账户级 Zone 解析
   `resolveCfAccount` / `resolveZoneIdAndTokenFromAccounts` / `getActiveAccounts`，
   DNS 增删改时遍历 active 账户，优先 zone_id 精确匹配 + fallback 解析，
-  使 rol.moe 与 kivotos.edu.kg 多域名自动分流。
+  使部署者的多个自有主域能够按账户自动分流。
 - `src/services/cloudflare.ts`：DNS 创建/更新/删除改用 `resolveCfAccount` 替代
   原来全局 `CF_API_TOKEN + getZoneIdForDomain`（修复第二域名解析空报错的根因）。
 - `src/config.ts`：新增按账户解析 zone/token 的逻辑。
@@ -131,7 +131,7 @@
 |---|---|---|
 | 数据库索引优化 | 新增 `0006` 迁移，全 `IF NOT EXISTS` 幂等；`migrations apply` 机制天然只执行未应用文件，不重复不浪费额度 | B 节 |
 | 减少查找消耗 | 为 `subdomains/dns_records/cloudflare_accounts/users/user_email_verifications/announcements` 高频查询补复合索引 | B 节 |
-| `FRIEND_LINKS` 默认启用 | `[vars]` 写入莉莉安尼亚邮箱系统友链 | 七、1 |
+| `FRIEND_LINKS` 默认启用 | `[vars]` 写入示例友链（部署者应替换为自有友链） | 七、1 |
 | `BANNED_PREFIXES` 更新 | 按用户最新清单去重 + 补 26 个常见保留域，已写入 `[vars]` | 七、1 |
 | 公告轮播/缩略展开/置顶/排序 | **已完成**：数据层（0006 加列）+ 后端（排序/置顶/新增序号重排）+ 前端（置顶直出全文、普通轮播、缩略可展开、管理端置顶/排序控件） | 九 |
 
@@ -163,6 +163,117 @@
   peerOptional 版本冲突）。
 - 合规复核（本轮）：新增安全与可观测改动已并入本文件「时间节点」与「明细」，
   仍以 GPL-3.0 授权再分发。
+
+### 10. UI 与 favicon 细节修复（2026-09-15）
+- `src/routes/pages.ts`：修正 `bgStyle` 的 CSS 背景**直出裸外链**为走 `proxyUrl`（消除
+  HTML 中残留的 `sukicdn.com` 域名）；favicon 额外增加
+  `<link rel="shortcut icon" href="/favicon.ico">`。
+- `src/index.ts`：新增 `/favicon.ico` 端点（返回 `SITE_LOGO` 图像，
+  `content-type: image/x-icon` + 边缘缓存，无 logo 则 204）——兼容 via 等极简浏览器。
+- `src/routes/pages.ts`：移动端 `@media (max-width:768px)` 适配——`.user-name`
+  由 `display:none`（隐藏）改为**显示且单行省略限宽**；顶部导航允许换行防挤压；
+  表单/卡片/表格容器 `width:100%` + `box-sizing:border-box` 防遮挡；
+  全局 `overflow-x:hidden` 防横向溢出。
+
+### 11. DNS 实时读取与存储架构（2026-09-15）
+- `wrangler.toml [vars]`：新增 `DNS_LIVE_READ="true"`。
+- `src/config.ts`：新增 `isDnsLiveRead(env)`。
+- `src/types.ts`（`Env`）：新增 `DNS_LIVE_READ?`。
+- `src/services/cloudflare.ts`：新增 `listAllZoneRecords`（分页拉取某 Zone 全量 DNS 记录，
+  上限 2000 条，供实时读取侧在代码内按名称前缀过滤，规避 CF `name` 参数不精确匹配）。
+- `src/db/queries.ts`：新增 `getDnsRecordByCfId`（按 CF 记录 id 反查，供实时读取下
+  更新/删除定位）。
+- `src/routes/api.ts`：新增 `readRecordsForSubdomain`——开启 `DNS_LIVE_READ` 时
+  `GET /api/subdomains/:id/records` 优先从 Cloudflare DSL 实时查（返回记录 `id` 即 CF 记录 id），
+  任何 CF 失败自动回退 D1 全量读取；PUT/DELETE 改为按 `cf_record_id` 定位（实时模式）。
+  效果：**高频 DNS 记录读取从 D1 挪到 CF，显著省 D1 读额度**，且保留写/审计/兜底，默认开启、失败回退、不中断。
+- `STORAGE.md`（新增）：存储与分发架构总纲——CDN 边缘缓存、DNS 实时读取（✅ 已落地）；
+  「自定义 SQLite → S3 → D1」后端链设计（含 **S3 为对象存储、非可查询 SQL 库** 的技术修正，
+  S3 仅作快照灾备），`DB_QUERY_ORDER`/`CUSTOM_SQLITE_*`/`S3_*`/`DB_ADMIN_ALERT_EMAIL` 环境变量契约，
+  一次性回填（`storage_backfill_done` 标记）与自动故障转移 + 管理员告警；实施作为后续独立提交。
+
+---
+
+### 12. 抢注防护与回收安全（2026-09-15）
+- `src/services/cloudflare.ts`：新增 `hasDnsRecordsForFqdn`（判定某 FQDN 名下是否已在 CF 存有解析配置）与
+  `deleteDnsRecordsByFqdn`（整组回收某 FQDN 名下记录，**范围精确到「==FQDN 或以 .FQDN 结尾」**，
+  绝不误删其它子域名/项目）。
+- `src/routes/api.ts`（申请 `POST /subdomains`）：在格式/前缀/配额/库内占用检查之后，新增 **CF DNS 占用检查**——
+  若目标 `<subdomain>.<domain>` 名下在 Cloudflare 已存在解析配置，直接 409 拒绝
+  （“该子域名名下已存在 DNS 解析配置，为保护既有项目不允许申请”），防止申请者顶掉他人已在用的解析；
+  CF 查询失败则回退仅按 DB 判断，保证申请功能在 CF 波动时不被误阻断。
+- `src/routes/api.ts`（管理员删除 `DELETE /admin/subdomains/:id`）：支持**可选 JSON 删除理由**；
+  先按 FQDN 精确回收该子域名全部 DNS 解析（不误删他人项目，CF 失败回退按 DB 记录逐个删），
+  再删除子域名，并**邮件通知所属用户**（新构建器 `buildDeletionNoticeEmail`，含删除理由）。
+- `src/routes/api.ts`（用户删除 `DELETE /subdomains/:id`）：改为**按 FQDN 精确回收全部 DNS 解析**
+  （防止“权限已删但解析仍生效”的残留；CF 失败回退 DB 逐个删），并**邮件通知管理员**
+  （新构建器 `buildUserDeletedAdminEmail`，发往已绑定邮箱的管理员，缺则回退 `ADMIN_CONTACT_EMAIL`）。
+- `src/services/email.ts`：新增 `buildDeletionNoticeEmail`、`buildUserDeletedAdminEmail` 两个邮件构建器。
+
+### 13. 层级子域名所有权审批（2026-09-15 本轮）
+实现「任意层级子域名的拥有权从属关系」模型：**既有配置即占用、逐级递归拦截、上级所有者审批**。
+- `migrations/0007_owner_approvals.sql`：新增 `owner_approvals` 表（待审批请求），记录目标 fqdn、
+  最近被拥有的祖先 fqdn、审批人（所有权者）/ 申请人、决策 token、状态（pending/approved/rejected/expired）、
+  审批时限 deadline_at、决策时间 decided_at；附带 4 个幂等索引（target 唯一、token、applicant、approver）。
+- `src/db/queries.ts`：新增 `enumerateAncestorFqdns`（构造目标 fqdn 的全部真祖先，离根最近者优先）、
+  `findApprovedOwnedAncestor`（在祖先链中查“最近被拥有的祖先”，即被批准的子域名，按最长优先）、
+  `createOwnerApproval` / `getOwnerApprovalByToken` / `getPendingApprovalByTarget` / `setOwnerApprovalStatus`
+  等审批读写函数。
+- `src/routes/api.ts`（申请 `POST /subdomains`）：**占用拦截改为递归**——对目标 fqdn 及其每一级祖先
+  整条链逐个做 CF 已配置检查（`hasDnsRecordsForFqdn`）；只要链上任一层已有解析配置（该层或其下），
+  该层之下的任意深度都不允许再申请（409，code `occupied-chain`）。
+  **上级审批**：若目标存在“被拥有的祖先”且其所有者非申请人本人，则不再直接建子域名，而是
+  写入 `owner_approvals`（pending）并向该祖先所有者发审批请求邮件（含“同意 / 驳回”按钮，即
+  `/decide-approval?token=…&action=approve|reject`）；超时（`OWNER_APPROVAL_DEADLINE_HOURS`，默认 72h）
+  未处理自动驳回。若申请人本人即上层所有者（拥有二级者可申请其下三级），则无需外部同意、回退正常流程。
+- `src/index.ts`：新增 GET `/decide-approval` 决策落地页——校验 token；超时（now>deadline 且仍 pending）
+  自动标 expired（视为自动驳回）；已决定则只读展示；approve 时创建该目标子域名并置为 approved
+  （所有权者已同意）并邮件通知申请人结果；reject 时标记 rejected 并通知申请人。
+- `src/services/email.ts`：新增 `buildOwnerApprovalRequestEmail`（发给所有权者的审批请求，含同意/驳回按钮）、
+  `buildOwnerApprovalResultEmail`（向申请人通知 同意/驳回/超时自动驳回 结果）。
+- `src/config.ts` / `src/types.ts` / `wrangler.toml`：新增非机密变量 `OWNER_APPROVAL_DEADLINE_HOURS`（默认 72）。
+
+### 14. 备案自动识别 + 存储后端/自动迁移（2026-09-15 本轮）
+- `src/config.ts` `getSiteBeian`：**备案号自动识别**。单一环境变量 `SITE_BEIAN` 只存当前启用的
+  一条编号，因此萌ICP备与中国正式 ICP **天然互斥、只能启用一个**：
+  - 含「萌」（如 `萌ICP备2024xxxx号`）→ 萌ICP备，仅展示文本、不伪造权威链接。
+  - 形如 `…ICP备…号/ICP证…` 且不含「萌」→ 中国正式 ICP，链接工信部官方 `https://beian.miit.gov.cn`
+    （`target=_blank rel=noopener noreferrer nofollow` 防劫持）。
+  - 其它 → 仅展示文本。编号一律 HTML 转义防 XSS；未配置则不渲染。
+- `src/db/provider.ts`（新增，自洽模块、**默认关闭=纯 D1 等价**）：按 `DB_QUERY_ORDER`
+  （custom-sqlite→d1）选择活动后端并做健康探测；实现自定义 SQLite（Turso/libsql over HTTP）
+  只读查询客户端、S3/R2 兼容 SigV4 客户端（PUT/GET，仅整库快照灾备，非实时 SQL 查询）、
+  `uploadSnapshotToS3`/`downloadSnapshotFromS3`/`exportD1Snapshot`（低频整库快照）。
+- `src/types.ts`：Env 补充存储链环境变量 `DB_QUERY_ORDER`/`CUSTOM_SQLITE_URL`/`CUSTOM_SQLITE_TOKEN`/
+  `CUSTOM_SQLITE_JWT`/`S3_BACKUP_BUCKET`/`S3_ENDPOINT`/`S3_REGION`/`S3_ACCESS_KEY`/`S3_SECRET_KEY`/
+  `S3_USE_PATH_STYLE`/`DB_ADMIN_ALERT_EMAIL`。
+  **生产逐查询改造（把 queries.ts 的 DB 入口统一走 provider 读回退链）按 STORAGE.md 规划作为独立 commit**。
+- `package.json`：迁移脚本改为 `wrangler d1 migrations apply cf --local/--remote`（只应用未执行文件、
+  幂等不重复、**不浪费 D1 额度**）；新增 `db:export`（整库导出备份到 snapshot.sql）、
+  `deploy:migrate`（迁移+发布一步）。DDL 严禁在 Worker 运行时执行，统一离线应用。
+
+### 15. 前端「待审批」面板 + 共享审批决策服务（2026-09-15 本轮）
+把层级子域名审批从「仅邮件按钮」扩展到**普通用户前端面板**（UI 与既有蓝白果冻主题一致，
+复用 `.section`/`.card`/`.subdomain-card`/`.badge`/`.btn` 等既有样式，不破坏主题）。
+- `src/services/owner-approval.ts`（新增，**统一决策落地层**）：抽取出邮件链接（服务端校验 token）
+  与前端面板（会话鉴权+审批人校验）两条入口**共用**的审批逻辑，保证行为完全一致：
+  `expireOwnerApproval`（pending 且超时 → 标 expired + 通知申请人，幂等）、
+  `rejectOwnerApproval`（标 rejected + 通知申请人）、
+  `approveOwnerApproval`（存在同名则只标 approved/通知、dupe=true；否则创建子域名并置 approved +
+  通知申请人）、`isOwnerApprovalExpired`/`splitOwnerApprovalTarget` 辅助。
+- `src/index.ts`：`GET /decide-approval` **改为调用该服务**（删除原本内联的重复分支），行为不变、
+  代码单一来源。
+- `src/db/queries.ts`：新增 `getOwnerApprovalsByApplicant`（我发起的）/ `getOwnerApprovalsByApprover`
+  （我作为审批人的），均最新优先。
+- `src/routes/api.ts`：新增普通用户鉴权接口——
+  `GET /owner-approvals`（返回 req 两侧列表，并附带申请人用户名便于展示）、
+  `POST /owner-approvals/:id/approve`、`POST /owner-approvals/:id/reject`
+  （仅该请求的审批人本人可操作；pending 且超时 → 服务端再次按当前时间为准自动驳回）。
+- `src/routes/pages.ts`：新增「待审批 · 层级子域」面板（置于「我的子域名」之后）——两个子卡片：
+  ① 待我处理的上级所有权请求（含「同意 / 驳回」按钮，超时显示为已超时）；② 我发起的申请状态；
+  新增 `renderApprovalsPanel`/`ownerApprovalMeta`/`loadOwnerApprovals`/`decideOwnerApproval`。
+  `init()` 增加独立 try/catch 加载，不破坏既有“加载失败也必达渲染”的兜底。
+验证：`npx tsc --noEmit` 通过。
 
 ---
 
@@ -213,4 +324,12 @@
 - **AI 辅助生成不影响 GPL-3.0 义务**：上述生成内容与人工修改同等落入本仓库、
   同受 GPL-3.0 授权，接收者仍须遵守随附 `LICENSE` / `NOTICE` / 本 `MODIFICATIONS.md`。
 
-—— R.O.L. Domain System（Vibe Coding 演化版）
+—— Fork 维护方（Vibe Coding 演化版）
+
+> 增补（同日）：**MySQL 最高优先级后端**已加入 `provider.ts` 与 `DB_QUERY_ORDER` 合法项
+> （`mysql` > `custom-sqlite` > `d1`；缺省 `d1` 现状不变）。MySQL 经 Cloudflare Hyperdrive
+> （`env.HYPERDRIVE.connectionString`）接入，`mysqlSelect` 用非字面量动态 import `mysql2`，
+> 缺失/连不上自动回退，tsc 不依赖 mysql2 是否安装。选择 MySQL 而非 Mongo：本项目为关系型+SQL，
+> 与既有表/迁移/占位符语义一致，可零改写复用。另：`config.getSiteBeian` 萌ICP备现已跳转
+> 萌备官方 `https://icp.gov.moe/?keyword=<数字串>`（数字由正则提取、仅数字、防注入，rel=noopener nofollow），
+> 与中国ICP在单一 `SITE_BEIAN` 变量下互斥。

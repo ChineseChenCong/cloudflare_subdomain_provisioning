@@ -279,3 +279,143 @@ export function buildNewRequestNotifyEmail(
     text: `用户 ${username} 申请了子域名 ${fqdn}，请登录 ${siteUrl} 审核。`,
   };
 }
+
+/** 管理员删除（或停用）子域名时发送给用户的通知邮件 */
+export function buildDeletionNoticeEmail(
+  subdomain: string,
+  domain: string,
+  reason: string,
+  siteName: string,
+  siteUrl: string
+): EmailOptions {
+  const fqdn = `${subdomain}.${domain}`;
+  return {
+    to: '',
+    subject: `🛑 您的子域名 ${fqdn} 已被移除 - ${siteName}`,
+    html: `
+<!DOCTYPE html>
+<html><body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f8f9fa;padding:40px 0;">
+<div style="max-width:520px;margin:0 auto;background:white;border-radius:12px;padding:40px;box-shadow:0 2px 12px rgba(0,0,0,0.08);">
+  <h2 style="color:#dc2626;margin:0 0 16px;">🛑 子域名已被移除</h2>
+  <p style="color:#333;font-size:15px;line-height:1.6;">
+    您的子域名 <strong style="font-family:monospace;background:#fef2f2;padding:2px 8px;border-radius:4px;">${fqdn}</strong>
+    已被管理员回收，其下 DNS 解析配置已同步删除，域名将不再生效。
+  </p>
+  <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:16px;margin:16px 0;">
+    <p style="color:#991b1b;font-size:14px;margin:0;"><strong>移除原因：</strong></p>
+    <p style="color:#991b1b;font-size:14px;margin:8px 0 0;">${reason}</p>
+  </div>
+  <p style="color:#333;font-size:15px;line-height:1.6;">如需恢复，可重新登录 ${siteName} 申请其他子域名。</p>
+  <div style="text-align:center;margin:24px 0;">
+    <a href="${siteUrl}" style="background:#dc2626;color:#fff;padding:12px 32px;border-radius:8px;text-decoration:none;font-weight:600;">返回 ${siteName}</a>
+  </div>
+  <p style="color:#999;font-size:12px;margin-top:24px;border-top:1px solid #eee;padding-top:16px;">此邮件由 ${siteName} 自动发送，请勿直接回复。</p>
+</div>
+</body></html>`,
+    text: `您的子域名 ${fqdn} 已被管理员回收，DNS 解析已同步删除。移除原因：${reason}。`,
+  };
+}
+
+/** 用户自行删除子域名时，通知管理员的邮件 */
+export function buildUserDeletedAdminEmail(
+  username: string,
+  subdomain: string,
+  domain: string,
+  siteName: string,
+  siteUrl: string
+): EmailOptions {
+  const fqdn = `${subdomain}.${domain}`;
+  return {
+    to: '',
+    subject: `🗑️ 用户删除了子域名 ${fqdn} - ${siteName}`,
+    html: `
+<!DOCTYPE html>
+<html><body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f8f9fa;padding:40px 0;">
+<div style="max-width:520px;margin:0 auto;background:white;border-radius:12px;padding:40px;box-shadow:0 2px 12px rgba(0,0,0,0.08);">
+  <h2 style="color:#f59e0b;margin:0 0 16px;">🗑️ 子域名已由用户删除</h2>
+  <p style="color:#333;font-size:15px;line-height:1.6;">
+    用户 <strong>${username}</strong> 已删除子域名
+    <strong style="font-family:monospace;background:#fef3c7;padding:2px 8px;border-radius:4px;">${fqdn}</strong>。
+  </p>
+  <p style="color:#333;font-size:15px;line-height:1.6;">
+    该子域名下的全部 DNS 解析配置已同步自动删除，域名不再解析，原权限已回收。
+  </p>
+  <div style="text-align:center;margin:24px 0;">
+    <a href="${siteUrl}" style="background:#f59e0b;color:#fff;padding:12px 32px;border-radius:8px;text-decoration:none;font-weight:600;">前往管理后台</a>
+  </div>
+</div>
+</body></html>`,
+    text: `用户 ${username} 删除了子域名 ${fqdn}，其下 DNS 解析已同步删除。`,
+  };
+}
+
+/** 上级所有权审批请求：发给“最近被拥有的祖先”的所有者，含确定/驳回按钮 */
+export function buildOwnerApprovalRequestEmail(
+  ownerName: string,
+  applicantName: string,
+  targetFqdn: string,
+  baseFqdn: string,
+  approveUrl: string,
+  rejectUrl: string,
+  deadlineHours: number,
+  siteName: string,
+  siteUrl: string
+): EmailOptions {
+  return {
+    to: '',
+    subject: `📩 子域名审批请求：${applicantName} 申请 ${targetFqdn} - ${siteName}`,
+    html: `
+<!DOCTYPE html>
+<html><body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f8f9fa;padding:40px 0;">
+<div style="max-width:520px;margin:0 auto;background:white;border-radius:12px;padding:40px;box-shadow:0 2px 12px rgba(0,0,0,0.08);">
+  <h2 style="color:#3b82f6;margin:0 0 12px;">📩 子域名审批申请</h2>
+  <p style="color:#333;font-size:15px;line-height:1.6;">您好，您拥有上层子域名
+    <strong style="font-family:monospace;background:#eff6ff;padding:2px 8px;border-radius:4px;">${baseFqdn}</strong>，
+    用户 <strong>${applicantName}</strong> 申请其下子域名
+    <strong style="font-family:monospace;background:#eff6ff;padding:2px 8px;border-radius:4px;">${targetFqdn}</strong> 的使用权。</p>
+  <p style="color:#64748b;font-size:14px;">请在 <strong>${deadlineHours} 小时内</strong>处理；超时未处理将自动驳回。</p>
+  <div style="display:flex;gap:12px;margin:24px 0;">
+    <a href="${approveUrl}" style="flex:1;text-align:center;background:#16a34a;color:#fff;padding:12px 0;border-radius:8px;text-decoration:none;font-weight:600;">✔ 同意</a>
+    <a href="${rejectUrl}" style="flex:1;text-align:center;background:#dc2626;color:#fff;padding:12px 0;border-radius:8px;text-decoration:none;font-weight:600;">✘ 驳回</a>
+  </div>
+  <div style="text-align:center;margin:16px 0;"><a href="${siteUrl}" style="color:#3b82f6;font-size:14px;">前往 ${siteName}</a></div>
+  <p style="color:#999;font-size:12px;margin-top:24px;border-top:1px solid #eee;padding-top:16px;">此邮件由 ${siteName} 自动发送，请勿直接回复。</p>
+</div>
+</body></html>`,
+    text: `用户 ${applicantName} 申请您拥有的 ${baseFqdn} 之下级子域名 ${targetFqdn}。同意：${approveUrl}；驳回：${rejectUrl}。${deadlineHours} 小时内未处理将自动驳回。`,
+  };
+}
+
+/** 把上级审批结果通知给申请人（同意/驳回/超时自动驳回） */
+export function buildOwnerApprovalResultEmail(
+  applicantName: string,
+  targetFqdn: string,
+  baseFqdn: string,
+  result: 'approved' | 'rejected' | 'expired',
+  siteName: string,
+  siteUrl: string
+): EmailOptions {
+  const map = {
+    approved: { emoji: '✅', color: '#16a34a', title: '审批已同意', desc: `您申请的子域名 ${targetFqdn} 已获上层 ${baseFqdn} 所有者同意，现已生效。` },
+    rejected: { emoji: '⛔', color: '#dc2626', title: '审批已驳回', desc: `您申请的子域名 ${targetFqdn} 已被上层 ${baseFqdn} 所有者驳回，未能开通。` },
+    expired: { emoji: '⏰', color: '#f59e0b', title: '审批已超时自动驳回', desc: `您申请的子域名 ${targetFqdn} 因上层所有者未在时限内处理而被自动驳回，请重新申请。` },
+  } as const;
+  const m = map[result];
+  return {
+    to: '',
+    subject: `${m.emoji} ${m.title}：${targetFqdn} - ${siteName}`,
+    html: `
+<!DOCTYPE html>
+<html><body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f8f9fa;padding:40px 0;">
+<div style="max-width:520px;margin:0 auto;background:white;border-radius:12px;padding:40px;box-shadow:0 2px 12px rgba(0,0,0,0.08);">
+  <h2 style="color:${m.color};margin:0 0 16px;">${m.emoji} ${m.title}</h2>
+  <p style="color:#333;font-size:15px;line-height:1.6;">${m.desc}</p>
+  <div style="text-align:center;margin:24px 0;">
+    <a href="${siteUrl}" style="display:inline-block;background:${m.color};color:#fff;padding:12px 32px;border-radius:8px;text-decoration:none;font-weight:600;">前往 ${siteName}</a>
+  </div>
+  <p style="color:#999;font-size:12px;margin-top:24px;border-top:1px solid #eee;padding-top:16px;">此邮件由 ${siteName} 自动发送，请勿直接回复。</p>
+</div>
+</body></html>`,
+    text: `${m.title}：${m.desc}`,
+  };
+}

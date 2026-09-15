@@ -1,7 +1,7 @@
 NOTICE
 ======
 
-本项目（Cloudflare Subdomain Provisioning / R.O.L. Domain System）
+本项目（Cloudflare Subdomain Provisioning）
 依据
     GNU GENERAL PUBLIC LICENSE
     Version 3, 29 June 2007
@@ -42,7 +42,7 @@ GPL-3.0 的合规义务，向所有接收者明确告知：
 不附带任何明示或默示担保（如适销性、特定用途适用性、不侵权等）。
 责任与风险由使用者自行承担；任何损失不由本项目的贡献者负担。
 
-—— R.O.L. Domain System 项目
+—— Fork 维护方
 
 --------------------------------------------------------------------------------
 四、AI 辅助开发（Vibe Coding）声明
@@ -58,4 +58,4 @@ GPL-3.0 的合规义务，向所有接收者明确告知：
 3. AI 辅助生成不影响 GPL-3.0 义务：上述内容与人工修改同等落入本仓库、同受
    GPL-3.0 授权，接收者仍须遵守本 LICENSE / NOTICE / MODIFICATIONS.md。
 
-—— R.O.L. Domain System 项目
+—— Fork 维护方

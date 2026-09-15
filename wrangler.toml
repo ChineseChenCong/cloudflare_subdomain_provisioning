@@ -24,6 +24,10 @@ EMAIL_VERIFICATION_REQUIRED = "true"
 EMAIL_DAILY_EMAIL_LIMIT = "5"
 MAX_RECORDS_PER_SUBDOMAIN = "1000"
 MAX_SUBDOMAINS_PER_USER = "5"
+# DNS 记录读取：优先从 Cloudflare 实时查（省 D1 读），CF 失败自动回退 D1
+DNS_LIVE_READ = "true"
+# 上级所有权审批超时（小时）；超时未处理自动驳回。默认 72
+OWNER_APPROVAL_DEADLINE_HOURS = "72"
 SITE_LOGO = "https://sukicdn.com/bg5drs/i/2026/07/04/10ckw.png"
 SITE_NAME = "R.O.L. Domain System"
 SMTP_FROM = "noreply@rol.moe"

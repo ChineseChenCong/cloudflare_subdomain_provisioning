@@ -261,6 +261,36 @@ npm run deploy
 npm run db:migrate:remote
 ```
 
+## 🔄 部署前品牌替换清单（Rebrand Checklist）
+
+> 本项目为上游 `Little100/cloudflare_subdomain_provisioning` 的 GPL-3.0 派生修改版
+> （详见仓库根目录 `NOTICE` / `MODIFICATIONS.md`）。GPL-3.0 **不要求**衍生部署方
+> 沿用原项目或其维护方的名称、域名、Logo 或友情链接；为了**不对原项目/原作者造成
+> 误导或冒充、也不会让访客误以为本部署与原维护方有关**，请在正式对外部署前，
+> **务必把下列所有“可辨识原项目品牌”的默认项替换为你自己的内容**：
+
+| # | 替换项 | 位置 | 说明 |
+|---|--------|------|------|
+| 1 | 站点名称 | `wrangler.toml [vars]` → `SITE_NAME` | 替换为自有站名（默认 `SubDomain Hub`） |
+| 2 | 站点头像/Logo | `wrangler.toml [vars]` → `SITE_LOGO` | 替换为自有 Logo（favicon 亦复用它） |
+| 3 | 备案号 | `wrangler.toml [vars]` → `SITE_BEIAN` | 默认注释示例 `浙ICP备…`，替换或删除 |
+| 4 | 友情链接 | `wrangler.toml [vars]` → `FRIEND_LINKS` | JSON 数组**全部**替换为自有站点（默认里含原维护方示例友链） |
+| 5 | 邮箱域名白名单 | `wrangler.toml [vars]` → `ALLOWED_EMAIL_DOMAINS` | 换成部署者自己的允许邮箱域（默认含原维护方自有邮箱域） |
+| 6 | 分发主域 | `DOMAINS`（Secret） | 换成自有主域，勿沿用原维护方域名 |
+| 7 | 欢迎/默认公告文案 | `migrations/0004_*.sql`（含 `SubDomain Hub` 欢迎语） | 改成自有文案 |
+| 8 | 页面标题/页脚文字 | 由 `SITE_NAME` / `SITE_BEIAN` 渲染 | 若页面仍显示 `SubDomain Hub` 说明变量未被覆盖 |
+| 9 | 邮件发件人 | `SMTP_FROM_NAME`（Secret） | 换为自有发件人名称 |
+| 10 | 联系管理员邮箱 | `ADMIN_CONTACT_EMAIL`（Secret） | 换为自有邮箱 |
+| 11 | 本地示例变量 | `.dev.vars.example` | 校验其中的示例域名/邮箱是否仍带原项目品牌 |
+| 12 | 仓库顶部文档 | 本 `README.md` 顶部标题与示例 | 部署方 fork 后可改写为自有标题与示例 |
+
+**合规说明：**
+- 上述替换**不受 GPL-3.0 强制**，是出于"避免冒充原项目/尊重原项目品牌"的合理工程建议，
+  而非许可证义务；替换品牌不影响本项目以 GPL-3.0 再分发/再修改的合法性。
+- **必须保留**（GPL-3.0 §5/§4 义务，不可删除）：随附 `LICENSE`、`NOTICE`、
+  `MODIFICATIONS.md`，其中对**上游作者 `Little100` 及上游仓库网址**的著作权/来源告知
+  必须保留；可在其中将"fork 维护方署名、品牌名、自有域名"替换为部署者自身内容。
+
 ## ⚙️ 配置说明
 
 ### 环境变量 (wrangler.toml [vars])
@@ -270,6 +300,7 @@ npm run db:migrate:remote
 | `BANNED_PREFIXES` | 禁止使用的子域名前缀 | `www,ns1,ns2,...` |
 | `MAX_SUBDOMAINS_PER_USER` | 每用户最多子域名数 | `1` |
 | `MAX_RECORDS_PER_SUBDOMAIN` | 每子域名最多 DNS 记录数 | `20` |
+| `DNS_LIVE_READ` | DNS 记录读取来源：`true`/`1` 时优先从 Cloudflare 实时查（省 D1 读额度），CF 失败自动回退 D1 | `true` |
 | `SITE_NAME` | 站点名称 | `SubDomain Hub` |
 | `SITE_BACKGROUND_IMAGE` | 站点背景图 URL（支持任意图片链接） | 无 |
 | `SITE_BACKGROUND_OVERLAY` | 背景图遮罩颜色（hex 或 rgba） | `rgba(15, 23, 42, 0.7)` |

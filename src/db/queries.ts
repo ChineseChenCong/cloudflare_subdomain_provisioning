@@ -1,4 +1,4 @@
-import type { Env, User, Subdomain, DnsRecord, CloudflareAccount, EmailVerification, Announcement } from '../types';
+import type { Env, User, Subdomain, DnsRecord, CloudflareAccount, EmailVerification, Announcement, OwnerApproval } from '../types';
 
 export interface FriendLinkWithId {
   id: number;
@@ -197,6 +197,18 @@ export async function getDnsRecordById(db: D1Database, id: number): Promise<DnsR
   return db
     .prepare('SELECT * FROM dns_records WHERE id = ?')
     .bind(id)
+    .first<DnsRecord>();
+}
+
+/** 按 Cloudflare 记录 ID 反查（DNS 实时读取模式下，更新/删除以 CF id 定位） */
+export async function getDnsRecordByCfId(
+  db: D1Database,
+  subdomainId: number,
+  cfRecordId: string
+): Promise<DnsRecord | null> {
+  return db
+    .prepare('SELECT * FROM dns_records WHERE subdomain_id = ? AND cf_record_id = ?')
+    .bind(subdomainId, cfRecordId)
     .first<DnsRecord>();
 }
 
@@ -692,4 +704,149 @@ export async function getFriendLinksFromDb(db: D1Database): Promise<FriendLinkWi
     .prepare('SELECT * FROM friend_links ORDER BY sort_order ASC, id ASC')
     .all<FriendLinkWithId>();
   return result.results;
+}
+
+// ==================== Owner Approval (上级所有权审批，层级子域名) ====================
+
+export async function createOwnerApproval(
+  db: D1Database,
+  base: {
+    targetFqdn: string;
+    baseFqdn: string;
+    approverUserId: number;
+    applicantUserId: number;
+    token: string;
+    deadlineAt: string;
+  }
+): Promise<OwnerApproval> {
+  const res = await db
+    .prepare(
+      `INSERT INTO owner_approvals
+        (target_fqdn, base_fqdn, approver_user_id, applicant_user_id, token, deadline_at)
+       VALUES (?, ?, ?, ?, ?, ?)`
+    )
+    .bind(
+      base.targetFqdn,
+      base.baseFqdn,
+      base.approverUserId,
+      base.applicantUserId,
+      base.token,
+      base.deadlineAt
+    )
+    .run();
+  const id = Number((res.meta as any)?.last_row_id);
+  const row = await getOwnerApprovalById(db, id);
+  if (!row) throw new Error('Failed to create owner approval');
+  return row;
+}
+
+export async function getOwnerApprovalById(db: D1Database, id: number): Promise<OwnerApproval | null> {
+  return db
+    .prepare('SELECT * FROM owner_approvals WHERE id = ?')
+    .bind(id)
+    .first<OwnerApproval>();
+}
+
+export async function getOwnerApprovalByToken(db: D1Database, token: string): Promise<OwnerApproval | null> {
+  return db
+    .prepare('SELECT * FROM owner_approvals WHERE token = ?')
+    .bind(token)
+    .first<OwnerApproval>();
+}
+
+export async function getPendingApprovalByTarget(
+  db: D1Database,
+  targetFqdn: string
+): Promise<OwnerApproval | null> {
+  return db
+    .prepare(
+      `SELECT * FROM owner_approvals WHERE target_fqdn = ? AND status = 'pending'`
+    )
+    .bind(targetFqdn)
+    .first<OwnerApproval>();
+}
+
+export async function setOwnerApprovalStatus(
+  db: D1Database,
+  id: number,
+  status: 'approved' | 'rejected' | 'expired'
+): Promise<void> {
+  await db
+    .prepare(
+      `UPDATE owner_approvals SET status = ?, decided_at = datetime('now') WHERE id = ?`
+    )
+    .bind(status, id)
+    .run();
+}
+
+/** 我发起的上级所有权审批（申请人视角），最新优先 */
+export async function getOwnerApprovalsByApplicant(
+  db: D1Database,
+  applicantUserId: number
+): Promise<OwnerApproval[]> {
+  const res = await db
+    .prepare(
+      `SELECT * FROM owner_approvals WHERE applicant_user_id = ?
+       ORDER BY created_at DESC, id DESC`
+    )
+    .bind(applicantUserId)
+    .all<OwnerApproval>();
+  return res.results;
+}
+
+/** 我作为所有权者待/已处理的审批（审批人视角），最新优先 */
+export async function getOwnerApprovalsByApprover(
+  db: D1Database,
+  approverUserId: number
+): Promise<OwnerApproval[]> {
+  const res = await db
+    .prepare(
+      `SELECT * FROM owner_approvals WHERE approver_user_id = ?
+       ORDER BY created_at DESC, id DESC`
+    )
+    .bind(approverUserId)
+    .all<OwnerApproval>();
+  return res.results;
+}
+
+/**
+ * 在给定祖先列表中找到“最近一个已被用户拥有（subdomains.status='approved'）的真祖先”，
+ * 作为该目标子域名的上级所有权审批人。返回拥有的祖先子域名记录（最长者优先）。
+ */
+export async function findApprovedOwnedAncestor(
+  db: D1Database,
+  ancestors: string[]
+): Promise<Subdomain | null> {
+  if (ancestors.length === 0) return null;
+  const placeholders = ancestors.map(() => '?').join(',');
+  const result = await db
+    .prepare(
+      `SELECT * FROM subdomains
+       WHERE status = 'approved'
+         AND (subdomain || '.' || domain) IN (${placeholders})
+       ORDER BY LENGTH(subdomain || '.' || domain) DESC
+       LIMIT 1`
+    )
+    .bind(...ancestors)
+    .first<Subdomain>();
+  return result || null;
+}
+
+/**
+ * 枚举一个 FQDN 的相对某根域的所有“真祖先”（不含自身，从根域的下一级子域名开始）。
+ * 例：root=example.org, fqdn=d.c.b.example.org → [b.example.org, c.b.example.org, d.c.b.example.org]，去掉自身返回前 3 个。
+ * 若 fqdn 直接等于根域的下一级（二级域名），则无真祖先，返回 []。
+ */
+export function enumerateAncestorFqdns(fqdn: string, domain: string): string[] {
+  const labels = fqdn.split('.');
+  const domainLabels = domain.split('.');
+  // 去除根域后得到的子域名标签链，如 d.c.b.example.org → [d, c, b]
+  const subLabels = labels.slice(0, labels.length - domainLabels.length);
+  const out: string[] = [];
+  // 逐层补前缀（离根最近的祖先最先）：j=1 → b.example.org；j=2 → c.b.example.org；…
+  // j 取到 len-1，不含自身（j=len 即完整的 fqdn）。
+  for (let j = 1; j < subLabels.length; j++) {
+    out.push(subLabels.slice(subLabels.length - j).join('.') + '.' + domain);
+  }
+  return out;
 }

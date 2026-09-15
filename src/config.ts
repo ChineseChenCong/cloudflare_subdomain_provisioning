@@ -72,6 +72,17 @@ export function getMaxRecords(env: Env): number {
   return parseInt(env.MAX_RECORDS_PER_SUBDOMAIN || '20', 10);
 }
 
+/** DNS 记录读取是否优先走 Cloudflare 实时查询（省 D1 读），CF 失败自动回退 DB */
+export function isDnsLiveRead(env: Env): boolean {
+  return env.DNS_LIVE_READ === 'true' || env.DNS_LIVE_READ === '1';
+}
+
+/** 上级所有权审批超时（小时），超时未处理自动驳回。默认 72 小时。 */
+export function getOwnerApprovalDeadlineHours(env: Env): number {
+  const v = parseInt(env.OWNER_APPROVAL_DEADLINE_HOURS || '72', 10);
+  return Number.isFinite(v) && v > 0 ? v : 72;
+}
+
 export function getAdminUsers(env: Env): string[] {
   if (!env.ADMIN_USERS) return [];
   return env.ADMIN_USERS.split(',').map((u) => u.trim().toLowerCase());
@@ -182,10 +193,39 @@ export function getSiteName(env: Env): string {
 }
 
 /**
- * 获取备案信息（未配置则不显示）
+ * 备案信息（自动识别「萌ICP备」与「中国正式 ICP 备案」，安全渲染）。
+ * 只用**一个环境变量 `SITE_BEIAN`**，因此两者天然互斥：把当前启用的那一个号码
+ * 填进去即可（想切到另一种就把号码换成那种，二者不可能同时启用）。
+ * 识别规则：
+ *  - 号码含「萌」（如 `萌ICP备2024xxxx号`）→ 萌ICP备，仅展示文本、不伪造权威链接。
+ *  - 形如 `…ICP备…号 / …ICP证…` 且不含「萌」→ 中国正式 ICP，链接工信部官网
+ *    https://beian.miit.gov.cn（`rel=noopener noreferrer nofollow` 防劫持）。
+ *  - 其它 → 仅展示文本（不加外部链接，避免指向仿冒站点）。
+ * 号码一律 HTML 转义（防 XSS）。未配置返回 ''（页脚不渲染该段）。
  */
 export function getSiteBeian(env: Env): string {
-  return env.SITE_BEIAN || '';
+  const raw = (env.SITE_BEIAN || '').trim();
+  if (!raw) return '';
+  const esc = raw
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+  if (raw.includes('萌')) {
+    // 萌ICP备 → 跳转萌备官方查询站：icp.gov.moe/?keyword=MMM（MMM=「萌ICP备…号」中的数字串）
+    // 数字串由正则提取，仅包含数字，无任何注入面；未匹配到数字时退化为纯文本展示。
+    const m = raw.match(/萌ICP备?\s*(\d+)/i);
+    const kw = m ? m[1] : raw.replace(/\D+/g, '').slice(0, 8);
+    if (kw) {
+      return `<a class="beian" href="https://icp.gov.moe/?keyword=${kw}" target="_blank" rel="noopener noreferrer nofollow">${esc}</a>`;
+    }
+    return `<span class="beian">${esc}</span>`;
+  }
+  if (/ICP[备证]/.test(raw)) {
+    return `<a class="beian" href="https://beian.miit.gov.cn" target="_blank" rel="noopener noreferrer nofollow">${esc}</a>`;
+  }
+  return `<span class="beian">${esc}</span>`;
 }
 
 /**
