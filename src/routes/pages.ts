@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+// FIXED: manual search + admin sync button, script syntax fix
 import { html, raw } from 'hono/html';
 import type { Env, User } from '../types';
 import { optionalAuthMiddleware } from '../middleware/auth';
