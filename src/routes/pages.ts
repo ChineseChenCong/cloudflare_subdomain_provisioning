@@ -287,7 +287,7 @@ function renderPage({
       if (state.user) {
         let adminLink = '';
         if (state.user.is_admin) {
-          adminLink = '<a href="#" class="btn btn-ghost btn-sm" onclick="navigate(\'admin\\'); return false;" style="font-size:13px">' + icons.admin + ' 管理</a>';
+          adminLink = '<a href="#" class="btn btn-ghost btn-sm" onclick="navigate(\'admin\'); return false;" style="font-size:13px">' + icons.admin + ' 管理</a>';
         }
         el.innerHTML = '<div class="user-info">' +
           '<img class="user-avatar" src="' + (state.user.avatar_url || '') + '" alt="">' +
@@ -773,7 +773,7 @@ function renderPage({
       const dp = paginateItems(list, state.dnsPager);
 
       let h = '<div class="dashboard fade-in">' +
-        '<a href="#" class="back-link" onclick="navigate(\\'dashboard\\'); return false;">← 返回子域名列表</a>' +
+        '<a href="#" class="back-link" onclick="navigate(\'dashboard\'); return false;">← 返回子域名列表</a>' +
         '<div class="dns-header"><h2>' + escapeHtml(fqdn) + ' - DNS 管理</h2></div>' +
         '<p style="font-size:13px;color:var(--text-muted);margin-bottom:20px;">记录: ' + (state.currentRecordCount||0) + ' / ' + (state.maxRecords||20) +
         ' · 名称 @ 或留空 = ' + escapeHtml(fqdn) + '，填 "www" = www.' + escapeHtml(fqdn) + '</p>';
@@ -954,7 +954,7 @@ function renderPage({
       const pendingCount = state.adminPending.length;
 
       let h = '<div class="dashboard fade-in">' +
-        '<a href="#" class="back-link" onclick="navigate(\\'dashboard\\'); return false;">← 返回面板</a>' +
+        '<a href="#" class="back-link" onclick="navigate(\'dashboard\'); return false;">← 返回面板</a>' +
         '<div class="section-header" style="margin-top:16px;display:flex;align-items:center;justify-content:space-between;gap:12px">' +
         '<h2 class="section-title" style="display:flex;align-items:center;gap:8px;margin:0">' + icons.admin + ' 管理员面板</h2>' +
         '<button class="btn btn-primary btn-sm btn-jelly" onclick="syncDatabaseNow()">🔄 同步数据库</button>' +
@@ -1472,7 +1472,7 @@ function renderPage({
 
     function renderAccountsPage() {
       let h = '<div class="dashboard fade-in">' +
-        '<a href="#" class="back-link" onclick="navigate(\\'dashboard\\'); return false;">← 返回面板</a>' +
+        '<a href="#" class="back-link" onclick="navigate(\'dashboard\'); return false;">← 返回面板</a>' +
         '<div class="section-header" style="margin-top:16px"><h2 class="section-title" style="display:flex;align-items:center;gap:8px">' + icons.key + ' Cloudflare 账户管理</h2></div>' +
         renderAccountsContent() + '</div>';
       return h;
