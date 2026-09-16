@@ -298,9 +298,11 @@ npm run db:migrate:remote
 | 变量 | 说明 | 默认值 |
 |------|------|--------|
 | `BANNED_PREFIXES` | 禁止使用的子域名前缀 | `www,ns1,ns2,...` |
-| `MAX_SUBDOMAINS_PER_USER` | 每用户最多子域名数 | `1` |
-| `MAX_RECORDS_PER_SUBDOMAIN` | 每子域名最多 DNS 记录数 | `20` |
+| `MAX_SUBDOMAINS_PER_USER` | 每用户最多子域名数 | `5` |
+| `MAX_RECORDS_PER_SUBDOMAIN` | 每子域名最多 DNS 记录数 | `1000` |
 | `DNS_LIVE_READ` | DNS 记录读取来源：`true`/`1` 时优先从 Cloudflare 实时查（省 D1 读额度），CF 失败自动回退 D1 | `true` |
+| `EMAIL_DAILY_EMAIL_LIMIT` | 每用户每日邮件发送上限 | `5` |
+| `OWNER_APPROVAL_DEADLINE_HOURS` | 层级审批超时小时，超时自动驳回 | `72` |
 | `SITE_NAME` | 站点名称 | `SubDomain Hub` |
 | `SITE_BACKGROUND_IMAGE` | 站点背景图 URL（支持任意图片链接） | 无 |
 | `SITE_BACKGROUND_OVERLAY` | 背景图遮罩颜色（hex 或 rgba） | `rgba(15, 23, 42, 0.7)` |
@@ -490,6 +492,102 @@ POST /api/subdomains/1/records
 - **悬浮效果** — 卡片和按钮的悬浮动画
 - **渐变色彩** — 彩色渐变 Logo 和按钮
 - **响应式布局** — 完美适配移动端
+## 🧩 完整功能清单（已实现但文档未完整覆盖）
+
+- **层级子域名所有权审批**
+  - 支持 `a.b` / `a.b.c` 多级 label 格式，前后端正则已放开。
+  - 申请时递归检查祖先链是否已被拥有：链上任一层已有 DNS 配置即 `occupied-chain` 阻止申请。
+  - 若最近被拥有的祖先非申请人本人，自动创建 `owner_approvals` 待审批请求，邮件通知上级所有者，带同意/驳回链接。
+  - 超时自动驳回，超时时长由 `OWNER_APPROVAL_DEADLINE_HOURS` 控制，默认 72 小时。
+  - 前端审批面板分三区：`待我处理` / `我发起的` / `已处理`，各区独立分页，每页 5/10/20/50。
+  - 删除已审批给他人的子域时，后端自动将对应审批记录 `status` 置 `deleted`，前端已处理区自动折叠隐藏，并邮件通知二级域名持有人。
+
+- **列表分页与筛选**
+  - 子域名列表分页 `subPager`，DNS 记录分页 `dnsPager`，每页可选 5/10/20/50，带 « ‹ › » 控件。
+  - DNS 记录顶部类型筛选 `dnsTypeFilter`：全部 / A / AAAA / CNAME / MX / TXT / SRV / CAA，显示当前 N/M 条计数。
+
+- **审批面板 UI 优化**
+  - `已处理` 记录折入底部 `<details>` 折叠区，避免主区无限拉长。
+  - 已处理区过滤 `status==='deleted'`，删除联动后自动消失。
+  - 蓝白色系、果冻动画、系统字体栈，与站点主题一致。
+
+- **DNS 记录操作可靠性修复**
+  - 前端 `onclick` 参数全部字符串化，避免 CF hex id 被当 JS 标识符导致 `ReferenceError`。
+  - 后端 `locateDnsRecord` 双路定位：CF hex id 查 `cf_record_id`，数字 id 查主键。
+  - `proxied` 切换路由改为 `/records/:subdomainId/:recordId/proxied`，传入子域 id 后双路定位。
+  - 移除全表 `getDnsRecordEntryByCfId`，改为子域约束索引查询，减少 D1 `rows-read` 消耗。
+
+- **静态资源与外链安全**
+  - CSS 完全静态化为 `/static/app.css`，`Cache-Control: public, max-age=31536000, s-maxage=31536000, immutable` + `nosniff`，命中 CF 边缘 CDN 后不触发 Worker。
+  - Logo / 背景图不再输出真实外链，改为固定端点 `/logo`、`/bg`，真实 URL 仅存服务端 env，源码中不再暴露源站域名。
+  - 头像走 GitHub 直连，避免占用 `/assets` 额度。
+  - `/assets` 白名单仅 `sukicdn.com`，防 SSRF，复用限流与缓存头。
+
+- **公告系统增强**
+  - 置顶公告直出全文，普通公告轮播 5s 自动切换 + 圆点手动切换。
+  - 普通公告默认 3 行缩略，可展开/收起全文。
+  - 管理端支持 `sort_order` 与 `is_pinned`，保存后本地就地更新保持滚动位置。
+  - 删除后 `sort_order` 紧凑重排，仅动展示列，不改主键。
+
+- **ICP 备案自动识别**
+  - 单变量 `SITE_BEIAN` 自动识别：含「萌」→ 萌ICP备 外链；含 `ICP备/ICP证` 且不含「萌」→ 工信部链接；其他仅文本展示。互斥只启一个，HTML 转义防 XSS。
+
+- **可观测性与安全响应头**
+  - 全局响应头：`X-Frame-Options: DENY`、`X-Content-Type-Options: nosniff`、`Referrer-Policy: strict-origin-when-cross-origin`、`Strict-Transport-Security: max-age=31536000; includeSubDomains`。
+  - CORS 收紧为同源回显，跨源自动拒绝。
+  - CSRF 二道防线：写方法校验 Origin/Referer 同源，跨源 403。
+  - 写操作统一输出 `[audit]` 日志到控制台，配合 `[observability.logs]` 100% 采样持久化。
+  - `/api/verification/send` 发邮件限流：每 IP 每分钟 5 次，叠加每用户每日 5 封。
+
+## ⚙️ 完整可配置变量
+
+### wrangler.toml [vars] 完整清单
+| 变量 | 说明 | 示例默认值 |
+|------|------|------------|
+| `BANNED_PREFIXES` | 禁止子域名前缀 | `www,ns1,...` |
+| `MAX_SUBDOMAINS_PER_USER` | 每用户最多子域名数 | `5` |
+| `MAX_RECORDS_PER_SUBDOMAIN` | 每子域名最多 DNS 记录数 | `1000` |
+| `DNS_LIVE_READ` | DNS 读优先走 CF 实时，失败回退 D1 | `true` |
+| `EMAIL_DAILY_EMAIL_LIMIT` | 每用户每日邮件上限 | `5` |
+| `OWNER_APPROVAL_DEADLINE_HOURS` | 层级审批超时小时 | `72` |
+| `SITE_NAME` | 站点名称 | `SubDomain Hub` |
+| `SITE_LOGO` | Logo URL | 空=内置 |
+| `SITE_BACKGROUND_IMAGE` | 背景图 URL | 空 |
+| `SITE_BACKGROUND_OVERLAY` | 背景遮罩 | `rgba(15,23,42,0.7)` |
+| `SITE_BEIAN` | 备案号，自动识别萌备/工信部 | 空=不显示 |
+| `ADMIN_CONTACT_EMAIL` | 联系管理员邮箱 | `admin@example.com` |
+| `FRIEND_LINKS` | 友情链接 JSON 数组 | `[]` |
+| `EMAIL_VERIFICATION_REQUIRED` | 是否强制邮箱验证 | `true` |
+| `ALLOWED_EMAIL_DOMAINS` | 邮箱白名单 | `example.com` |
+| `DB_QUERY_ORDER` | 读后端优先级：`mysql,custom-sqlite,d1` | `d1` |
+| `DB_ADMIN_ALERT_EMAIL` | 后端异常告警邮箱 | 空=复用 ADMIN_CONTACT_EMAIL |
+
+> 自定义 SQLite / S3 / MySQL 相关变量为可选，非机密普通变量，详见 `STORAGE.md`。
+
+### Secrets 建议
+- `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET`
+- `JWT_SECRET` / `ENCRYPTION_KEY`
+- `CF_API_TOKEN` / `DOMAINS` / `ADMIN_USERS`
+- `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` / `SMTP_FROM_NAME`
+- `RESEND_API_KEY` / `CUSTOM_SQLITE_TOKEN` 等
+
+## 🏗️ 存储与同步架构要点
+
+- **读回退链**：`DB_QUERY_ORDER` 决定 `mysql` → `custom-sqlite` → `d1` 优先级，健康探测失败自动回退，异常邮件告警 `DB_ADMIN_ALERT_EMAIL`。
+- **写时增量推**：D1 为唯一写主，写入成功后立即 `mirrorSyncRow` 单行 reconcile 到镜像后端，best-effort 不阻塞请求。
+- **日级自愈**：`[triggers] crons = ["0 0 * * *"]` 每天 UTC 0 点全量 `syncD1ToMirrors`，仅兜底冷对齐。
+- **S3/R2** 仅作整库快照灾备，不作为实时 SQL 后端。
+- **首次迁移**：`npm run db:export` → 导入目标 → 再接 read-through，顺序不可反。
+
+## 🔒 安全与运维承诺
+
+- JWT 含 `exp`，Cookie `HttpOnly + Secure + SameSite=Lax`。
+- OAuth `state` 防 CSRF，邮箱验证 token 24h 过期。
+- 全站 `escapeHtml` 覆盖，前端内联脚本经 Hono 反引号转义验证，`\\'` 双反斜杠规范。
+- 无行内 `<style>`，CSS 静态化 immutable 缓存，改样式需改路径加版本号。
+- `wrangler` 4.x 可观测性日志/跟踪 100% 采样持久化，审计日志不含隐私数据。
+- D1 额度保护：迁移只跑未应用文件、DDL 离线执行、无整库快照进请求路径。
+
 
 ## 📄 License
 

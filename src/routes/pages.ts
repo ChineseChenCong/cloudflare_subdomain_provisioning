@@ -181,6 +181,13 @@ function renderPage({
       subPager: { page: 1, perPage: 5 },
       dnsPager: { page: 1, perPage: 5 },
       dnsTypeFilter: '',
+      // 前端搜索字段
+      subSearch: '',
+      dnsSearch: '',
+      adminPendingSearch: '',
+      adminAllSearch: '',
+      adminUsersSearch: '',
+      apprSearch: '',
       // 审批面板分页（待处理·待我处理 / 待处理·我发起 / 已处理折叠区）
       apprPager: { apPage: 1, apPer: 5, rqPage: 1, rqPer: 5, donePage: 1, donePer: 5 },
       // Email verification
@@ -195,7 +202,10 @@ function renderPage({
         headers: { 'Content-Type': 'application/json', ...opts.headers },
         ...opts,
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 429) {
+        throw new Error('429:' + (data.error || '请求频率超限'));
+      }
       if (!res.ok) throw new Error(data.error || '请求失败');
       return data;
     }
@@ -219,6 +229,17 @@ function renderPage({
       el.textContent = message;
       container.appendChild(el);
       setTimeout(() => el.remove(), 3200);
+    }
+
+    function showRateLimitModal(action) {
+      const actionText = action === 'apply' ? '申请' : '删除';
+      const adminLink = document.querySelector('.contact-admin-btn');
+      const mailto = adminLink ? adminLink.getAttribute('href') : 'mailto:admin@example.com';
+      showModal('次数已达上限', '今日' + actionText + '次数已达上限，需管理员核准或次日自动解除', null, {
+        bodyHtml: '<p style="font-size:13px;color:var(--text-muted);margin-top:8px">别担心，提交后会次日自动恢复，也可以联系管理员人工核准哦~</p><p style="text-align:center;margin-top:12px"><a href="' + mailto + '" class="btn btn-primary btn-jelly" target="_blank">联系管理员</a></p>',
+        confirmText: '知道了',
+        confirmClass: 'btn btn-secondary'
+      });
     }
 
     // ==================== Modal ====================
@@ -356,6 +377,22 @@ function renderPage({
       if (pager.page > pages) pager.page = pages;
       return { items: items.slice((pager.page - 1) * per, pager.page * per), page: pager.page, pages, total, per };
     }
+    // 模糊匹配辅助
+    function matchesQuery(text, q) { return q && text ? text.toLowerCase().includes(q.toLowerCase()) : false; }
+    // 前端搜索防抖处理
+    function setSearch(key, val) {
+      clearTimeout(state._searchTimer);
+      state._searchTimer = setTimeout(() => {
+        requestAnimationFrame(() => {
+          state[key] = (val || '').trim();
+          if (key === 'subSearch') state.subPager.page = 1;
+          if (key === 'dnsSearch') state.dnsPager.page = 1;
+          if (key === 'adminPendingSearch' || key === 'adminAllSearch' || key === 'adminUsersSearch') {/* no pager reset needed for admin lists */}
+          if (key === 'apprSearch') {/* approvals pager stays */}
+          render();
+        });
+      }, 200);
+    }
     // 每页条数选择 + 翻页控件（‹/›/«/»）
     function pagerControl(pager, total, setPageName, setPerName) {
       const per = pager.perPage || 5;
@@ -422,16 +459,31 @@ function renderPage({
       const ap = state.ownerApprovals.approver || [];
 
       // 分区：仅「待处理」(pending 且未超时) 留在主区；已处理(同意/驳回/超时)折入底部「已处理」折叠区，避免主区越来越长。
-      const apPending = ap.filter((a) => ownerApprovalMeta(a).st === 'pending');
-      const apDone = ap.filter((a) => ownerApprovalMeta(a).st !== 'pending' && ownerApprovalMeta(a).st !== 'deleted');
-      const rqPending = rq.filter((a) => ownerApprovalMeta(a).st === 'pending');
-      const rqDone = rq.filter((a) => ownerApprovalMeta(a).st !== 'pending' && ownerApprovalMeta(a).st !== 'deleted');
+      let apPending = ap.filter((a) => ownerApprovalMeta(a).st === 'pending');
+      let apDone = ap.filter((a) => ownerApprovalMeta(a).st !== 'pending' && ownerApprovalMeta(a).st !== 'deleted');
+      let rqPending = rq.filter((a) => ownerApprovalMeta(a).st === 'pending');
+      let rqDone = rq.filter((a) => ownerApprovalMeta(a).st !== 'pending' && ownerApprovalMeta(a).st !== 'deleted');
+      const qAppr = (state.apprSearch || '').trim().toLowerCase();
+      if (qAppr) {
+        const filterAppr = (arr) => arr.filter(a => {
+          const t = (a.target_fqdn || '').toLowerCase();
+          const b = (a.base_fqdn || '').toLowerCase();
+          const applicant = (a.applicant_github_name || '').toLowerCase();
+          return t.includes(qAppr) || b.includes(qAppr) || applicant.includes(qAppr);
+        });
+        apPending = filterAppr(apPending);
+        apDone = filterAppr(apDone);
+        rqPending = filterAppr(rqPending);
+        rqDone = filterAppr(rqDone);
+      }
       const doneCount = apDone.length + rqDone.length;
 
       let h = '<div class="section"><div class="section-header">' +
         '<h2 class="section-title">待审批 · 层级子域</h2>' +
         '<span style="font-size:13px;color:var(--text-muted)">' + apPending.length + ' 待我处理 · ' + rqPending.length + ' 我发起的' +
-        (doneCount > 0 ? ' · ' + doneCount + ' 已处理' : '') + '</span></div>';
+        (doneCount > 0 ? ' · ' + doneCount + ' 已处理' : '') + '</span></div>' +
+        '<details style="margin:8px 0"><summary style="cursor:pointer;font-size:13px;color:var(--text-muted)">搜索审批</summary>' +
+        '<div style="margin-top:6px"><input class="form-input" placeholder="搜索 target_fqdn / base_fqdn / 申请人" value="' + escapeHtml(state.apprSearch || '') + '" oninput="setSearch(\\'apprSearch\\', this.value)" style="max-width:360px" /></div></details>';
 
       if (apPending.length === 0 && rqPending.length === 0 && doneCount === 0) {
         h += '<div class="card"><p style="color:var(--text-muted);margin:0">暂无审批请求。申请更深一层的子域名时，若其上级已被他人拥有，该申请会出现在这里等待其所有者同意；若您是所有者，他人申请您名下子域的请求也会在此处理。</p></div>';
@@ -509,7 +561,16 @@ function renderPage({
       return h;
     }
     function renderDashboard() {
-      const subs = state.subdomains;
+      let subs = state.subdomains;
+      const qSub = (state.subSearch || '').trim().toLowerCase();
+      if (qSub) {
+        subs = subs.filter(s => {
+          const fqdn = ((s.subdomain || '') + '.' + (s.domain || '')).toLowerCase();
+          const uname = (s.github_username || '').toLowerCase();
+          const email = (s.email || '').toLowerCase();
+          return fqdn.includes(qSub) || uname.includes(qSub) || email.includes(qSub);
+        });
+      }
       const activeSubs = subs.filter(s => s.status !== 'rejected');
       const sp = paginateItems(subs, state.subPager);
       const canCreate = activeSubs.length < state.config.max_subdomains;
@@ -552,7 +613,9 @@ function renderPage({
 
       h += '<div class="section"><div class="section-header">' +
         '<h2 class="section-title">我的子域名</h2>' +
-        '<span style="font-size:13px;color:var(--text-muted)">' + activeSubs.length + ' / ' + state.config.max_subdomains + '</span></div>';
+        '<span style="font-size:13px;color:var(--text-muted)">' + activeSubs.length + ' / ' + state.config.max_subdomains + '</span></div>' +
+        '<details style="margin:8px 0 12px 0"><summary style="cursor:pointer;font-size:13px;color:var(--text-muted)">搜索</summary>' +
+        '<div style="margin-top:6px"><input class="form-input" placeholder="搜索 FQDN / 用户昵称 / 邮箱" value="' + escapeHtml(state.subSearch || '') + '" oninput="setSearch(\\'subSearch\\', this.value)" style="max-width:360px" /></div></details>';
 
       if (subs.length === 0) {
         h += '<div class="card empty"><div class="empty-icon">' + icons.mailbox + '</div><p>还没有子域名，快去申请一个吧</p></div>';
@@ -615,18 +678,36 @@ function renderPage({
         toast(res.message || '申请已提交，等待审核', 'success');
         await loadDashboardData();
         render();
-      } catch (err) { toast(err.message, 'error'); }
+      } catch (err) {
+        if (err.message && err.message.startsWith('429:')) {
+          showRateLimitModal('apply');
+        } else {
+          toast(err.message, 'error');
+        }
+      }
     }
 
     function deleteSubdomainConfirm(id, fqdn) {
-      showModal('删除子域名', '确定要删除 ' + fqdn + ' 吗？所有关联的 DNS 记录也将被删除。', async () => {
+      const inputId = 'del-confirm-input-' + Math.random().toString(36).slice(2);
+      showModal('删除子域名', '为防止误操作，请在下方输入子域名全称进行确认：<br><b>' + escapeHtml(fqdn) + '</b>', async () => {
+        const val = (document.getElementById(inputId)?.value || '').trim().toLowerCase();
+        if (val !== fqdn.toLowerCase()) {
+          toast('输入的子域名不匹配，删除已取消', 'error');
+          return;
+        }
         try {
           await api('/subdomains/' + id, { method: 'DELETE' });
           toast('子域名已删除', 'success');
           await loadDashboardData();
           render();
-        } catch (err) { toast(err.message, 'error'); }
-      });
+        } catch (err) {
+          if (err.message && err.message.startsWith('429:')) {
+            showRateLimitModal('delete');
+          } else {
+            toast(err.message, 'error');
+          }
+        }
+      }, { bodyHtml: '<input id="' + inputId + '" class="form-input" placeholder="请输入子域名全称" autofocus />', confirmText: '确认删除', confirmClass: 'btn-danger btn-jelly' });
     }
 
     // ==================== DNS Manager ====================
@@ -650,9 +731,18 @@ function renderPage({
 
     function renderDnsManager() {
       const fqdn = state.currentSubdomainFqdn || '';
-      const records = state.records || [];
+      let records = state.records || [];
       const types = state.config.allowed_record_types || ['A','AAAA','CNAME','MX','TXT','SRV','CAA'];
       const editing = state.editingRecord;
+      const qDns = (state.dnsSearch || '').trim().toLowerCase();
+      if (qDns) {
+        records = records.filter(r => {
+          const name = (r.name || '').toLowerCase();
+          const content = (r.content || '').toLowerCase();
+          const type = (r.record_type || '').toLowerCase();
+          return name.includes(qDns) || content.includes(qDns) || type.includes(qDns);
+        });
+      }
       const list = records.filter(r => !state.dnsTypeFilter || r.record_type === state.dnsTypeFilter);
       const dp = paginateItems(list, state.dnsPager);
 
@@ -693,13 +783,16 @@ function renderPage({
         '</div></div></div>';
 
       if (records.length > 0) {
-        // 类型筛选工具栏（DNS 记录按类型筛选）
+        // 类型筛选工具栏（DNS 记录按类型筛选 + 搜索）
         h += '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px">' +
+          '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">' +
           '<label style="font-size:13px;color:var(--text-muted);display:flex;align-items:center;gap:6px">类型筛选 ' +
           '<select class="form-select" style="width:auto;padding:4px 26px 4px 10px;font-size:12px" onchange="setDnsType(this.value)">' +
           '<option value=""'+(!state.dnsTypeFilter?' selected':'')+'>全部</option>' +
           types.map(function (t2) { return '<option value="'+t2+'"'+(state.dnsTypeFilter===t2?' selected':'')+'>'+t2+'</option>'; }).join('') +
           '</select></label>' +
+          '<input class="form-input" style="width:auto;max-width:240px;padding:4px 10px;font-size:12px" placeholder="搜索 名称/内容" value="' + escapeHtml(state.dnsSearch || '') + '" oninput="setSearch(\\'dnsSearch\\', this.value)" />' +
+          '</div>' +
           '<span style="font-size:13px;color:var(--text-muted)">当前 ' + list.length + ' / ' + records.length + ' 条</span></div>';
         h += '<div class="card"><div class="table-wrap"><table>' +
           '<thead><tr><th>类型</th><th>名称</th><th>内容</th><th>TTL</th><th>代理</th><th>开关</th><th>操作</th></tr></thead><tbody>';
@@ -784,14 +877,21 @@ function renderPage({
     }
 
     function deleteRecordConfirm(id, name, type) {
-      showModal('删除 DNS 记录', '确定删除 '+type+' 记录 "'+name+'" 吗？', async () => {
+      const inputId = 'del-rec-confirm-' + Math.random().toString(36).slice(2);
+      const expected = (name || '').trim();
+      showModal('删除 DNS 记录', '为防止误操作，请在下方输入要删除的记录名称进行确认：<br><b>' + escapeHtml(type) + ' ' + escapeHtml(name) + '</b>', async () => {
+        const val = (document.getElementById(inputId)?.value || '').trim();
+        if (val.toLowerCase() !== expected.toLowerCase()) {
+          toast('输入的记录名称不匹配，删除已取消', 'error');
+          return;
+        }
         try {
           await api('/subdomains/'+state.currentSubdomain+'/records/'+id, { method:'DELETE' });
           toast('已删除', 'success');
           await loadRecords(state.currentSubdomain);
           render();
         } catch (err) { toast(err.message, 'error'); }
-      });
+      }, { bodyHtml: '<input id="' + inputId + '" class="form-input" placeholder="请输入记录名称" autofocus />', confirmText: '确认删除', confirmClass: 'btn-danger btn-jelly' });
     }
 
     // ==================== Proxied Toggle ====================
@@ -857,12 +957,22 @@ function renderPage({
     }
 
     function renderAdminPending() {
-      const items = state.adminPending;
+      let items = state.adminPending;
+      const q = (state.adminPendingSearch || '').trim().toLowerCase();
+      if (q) {
+        items = items.filter(s => {
+          const fqdn = ((s.subdomain || '') + '.' + (s.domain || '')).toLowerCase();
+          const uname = (s.github_username || '').toLowerCase();
+          const email = (s.email || '').toLowerCase();
+          return fqdn.includes(q) || uname.includes(q) || email.includes(q);
+        });
+      }
       if (items.length === 0) {
         return '<div class="card empty"><div class="empty-icon">' + icons.clipboard + '</div><p>暂无待审核的申请</p></div>';
       }
 
-      let h = '';
+      let h = '<details style="margin-bottom:10px"><summary style="cursor:pointer;font-size:13px;color:var(--text-muted)">搜索待审核</summary>' +
+        '<div style="margin-top:6px"><input class="form-input" placeholder="搜索 FQDN / 用户 / 邮箱" value="' + escapeHtml(state.adminPendingSearch || '') + '" oninput="setSearch(\\'adminPendingSearch\\', this.value)" style="max-width:360px" /></div></details>';
       items.forEach(sub => {
         const fqdn = sub.subdomain + '.' + sub.domain;
         h += '<div class="card card-hover review-card" style="margin-bottom:10px;padding:20px;">' +
@@ -883,12 +993,22 @@ function renderPage({
     }
 
     function renderAdminAll() {
-      const items = state.adminAll;
+      let items = state.adminAll;
+      const q = (state.adminAllSearch || '').trim().toLowerCase();
+      if (q) {
+        items = items.filter(s => {
+          const fqdn = ((s.subdomain || '') + '.' + (s.domain || '')).toLowerCase();
+          const uname = (s.github_username || '').toLowerCase();
+          return fqdn.includes(q) || uname.includes(q);
+        });
+      }
       if (items.length === 0) {
         return '<div class="card empty"><div class="empty-icon">' + icons.clipboard + '</div><p>暂无子域名记录</p></div>';
       }
 
-      let h = '<div class="card"><div class="table-wrap"><table>' +
+      let h = '<details style="margin-bottom:10px"><summary style="cursor:pointer;font-size:13px;color:var(--text-muted)">搜索所有子域名</summary>' +
+        '<div style="margin-top:6px"><input class="form-input" placeholder="搜索 FQDN / 用户昵称" value="' + escapeHtml(state.adminAllSearch || '') + '" oninput="setSearch(\\'adminAllSearch\\', this.value)" style="max-width:360px" /></div></details>' +
+        '<div class="card"><div class="table-wrap"><table>' +
         '<thead><tr><th>子域名</th><th>用户</th><th>状态</th><th>创建时间</th><th>操作</th></tr></thead><tbody>';
       items.forEach(sub => {
         const fqdn = sub.subdomain + '.' + sub.domain;
@@ -903,22 +1023,63 @@ function renderPage({
     }
 
     function renderAdminUsers() {
-      const users = state.adminUsers;
+      let users = state.adminUsers;
+      const q = (state.adminUsersSearch || '').trim().toLowerCase();
+      if (q) {
+        users = users.filter(u => {
+          const uname = (u.github_username || '').toLowerCase();
+          const email = (u.email || '').toLowerCase();
+          return uname.includes(q) || email.includes(q);
+        });
+      }
       if (users.length === 0) {
         return '<div class="card empty"><div class="empty-icon">' + icons.users + '</div><p>暂无用户</p></div>';
       }
 
-      let h = '<div class="card"><div class="table-wrap"><table>' +
-        '<thead><tr><th>头像</th><th>用户名</th><th>邮箱</th><th>身份</th><th>注册时间</th></tr></thead><tbody>';
+      let h = '<details style="margin-bottom:10px"><summary style="cursor:pointer;font-size:13px;color:var(--text-muted)">搜索用户</summary>' +
+        '<div style="margin-top:6px"><input class="form-input" placeholder="搜索 用户名 / 邮箱" value="' + escapeHtml(state.adminUsersSearch || '') + '" oninput="setSearch(\\'adminUsersSearch\\', this.value)" style="max-width:360px" /></div></details>' +
+        '<div class="card"><div class="table-wrap"><table>' +
+        '<thead><tr><th>头像</th><th>用户名</th><th>邮箱</th><th>身份</th><th>注册时间</th><th>操作</th></tr></thead><tbody>';
       users.forEach(u => {
+        const verifiedBadge = u.email_verified ? ' <span class="badge badge-approved" style="margin-left:4px">已验证</span>' : ' <span class="badge" style="margin-left:4px;background:#f87171;color:#fff">未验证</span>';
         h += '<tr><td><img src="'+(u.avatar_url||'')+'" style="width:28px;height:28px;border-radius:50%"></td>' +
           '<td>'+escapeHtml(u.github_username)+'</td>' +
-          '<td class="mono">'+(u.email? escapeHtml(u.email):'—')+'</td>' +
+          '<td class="mono">'+(u.email? escapeHtml(u.email):'—')+verifiedBadge+'</td>' +
           '<td>'+(u.is_admin?'<span class="badge badge-approved">管理员</span>':'用户')+'</td>' +
-          '<td>'+new Date(u.created_at).toLocaleDateString('zh-CN')+'</td></tr>';
+          '<td>'+new Date(u.created_at).toLocaleDateString('zh-CN')+'</td>' +
+          '<td><button class="btn btn-sm btn-primary btn-jelly" onclick="openModifyEmail('+u.id+',\\''+escapeHtml(u.email||'')+'\\')">修改邮箱</button></td></tr>';
       });
       h += '</tbody></table></div></div>';
       return h;
+    }
+
+    async function openModifyEmail(userId, currentEmail) {
+      const inputId = 'modify-email-input-' + Math.random().toString(36).slice(2);
+      const emailRegex = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;
+      showModal('修改邮箱', '请输入新的邮箱地址。修改后将发送验证邮件至新邮箱，需用户点击链接确认后生效。', async () => {
+        const newEmail = (document.getElementById(inputId)?.value || '').trim();
+        if (!emailRegex.test(newEmail)) {
+          toast('邮箱格式无效', 'error');
+          return;
+        }
+        if (newEmail.toLowerCase() === (currentEmail || '').toLowerCase()) {
+          toast('新邮箱与当前邮箱相同', 'error');
+          return;
+        }
+        try {
+          await api('/admin/users/' + userId + '/email', { method: 'PUT', body: JSON.stringify({ email: newEmail }) });
+          toast('已发送验证邮件至新邮箱，需用户确认后生效', 'success');
+          await loadAdminData();
+          render();
+        } catch (err) {
+          toast(err.message, 'error');
+        }
+      }, {
+        bodyHtml: '<input id="' + inputId + '" class="form-input" placeholder="新邮箱地址" value="' + escapeHtml(currentEmail || '') + '" autofocus />' +
+          '<p style="font-size:13px;color:var(--text-muted);margin-top:8px">已发送验证邮件至新邮箱，需用户点击链接确认后生效</p>',
+        confirmText: '提交',
+        confirmClass: 'btn-primary btn-jelly'
+      });
     }
 
     // ==================== 公告管理 ====================

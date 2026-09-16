@@ -46,6 +46,12 @@ import {
   getOwnerApprovalsByApprover,
   getApprovalsByTargetFqdn,
   setOwnerApprovalStatus,
+  getUserDailyLimits,
+  incrementUserDailyLimit,
+  resetUserDailyLimits,
+  getOverLimitUsers,
+  createEmailVerificationRecord,
+  updateUserEmail,
 } from "../db/queries";
 import { mirrorSyncRow } from "../services/mirror";
 import {
@@ -76,6 +82,10 @@ import {
   buildOwnerApprovalRequestEmail,
   buildApprovedSubdomainRemovedToApproverEmail,
 } from "../services/email";
+import {
+  isEmailDomainAllowed,
+  sendVerificationEmail,
+} from "../services/email-verification";
 
 type Variables = { user: User };
 
@@ -183,6 +193,16 @@ api.post("/subdomains", async (c) => {
     return c.json({ error: "该子域名前缀已被禁止使用" }, 400);
   }
 
+  // 每日申请次数限制（防滥用）
+  if (!user.is_admin) {
+    const rawLimit = Number(c.env.SUBDOMAIN_DAILY_LIMIT);
+    const limit = Number.isInteger(rawLimit) && rawLimit > 0 ? rawLimit : 5;
+    const limits = await getUserDailyLimits(c.env, user.id);
+    if (limits.limit_override === 0 && limits.apply_count >= limit) {
+      return c.json({ error: `今日申请次数已达上限（${limit} 次），请联系管理员核准后再试`, code: "DAILY_LIMIT_EXCEEDED" }, 429);
+    }
+  }
+
   // 检查用户配额（pending + approved 计数）
   const currentCount = await countUserSubdomains(c.env, user.id);
   const maxSubs = getMaxSubdomains(c.env);
@@ -281,6 +301,9 @@ api.post("/subdomains", async (c) => {
         mail.to = owner.email;
         await sendEmail(c.env, mail).catch(() => {});
       }
+      if (!user.is_admin) {
+        await incrementUserDailyLimit(c.env, user.id, 'apply');
+      }
       return c.json(
         {
           message: `该子域名使用权归 ${ownerAnc.subdomain}.${ownerAnc.domain} 所有者所有，需其同意；审批请求已发送，${hours} 小时内未处理将自动驳回`,
@@ -298,6 +321,10 @@ api.post("/subdomains", async (c) => {
     subdomainLower,
     domain,
   );
+
+  if (!user.is_admin) {
+    await incrementUserDailyLimit(c.env, user.id, 'apply');
+  }
 
   // write-through：该行增量推到镜像（best-effort，失败静默，由日级 cron 回补）
   await mirrorSyncRow(c.env, "subdomains", newSubdomain.id).catch(() => {});
@@ -419,6 +446,16 @@ api.delete("/subdomains/:id", async (c) => {
 
   if (subdomain.user_id !== user.id && !user.is_admin) {
     return c.json({ error: "无权操作此子域名" }, 403);
+  }
+
+  // 每日删除次数限制（防滥用）
+  if (!user.is_admin) {
+    const rawLimit = Number(c.env.SUBDOMAIN_DAILY_LIMIT);
+    const limit = Number.isInteger(rawLimit) && rawLimit > 0 ? rawLimit : 5;
+    const limits = await getUserDailyLimits(c.env, user.id);
+    if (limits.limit_override === 0 && limits.delete_count >= limit) {
+      return c.json({ error: `今日删除次数已达上限（${limit} 次），请联系管理员核准后再试`, code: "DAILY_LIMIT_EXCEEDED" }, 429);
+    }
   }
 
   // 已审核通过：先精确回收该子域名名下全部 DNS 解析（只限本 FQDN，绝不误删他人项目）
@@ -900,6 +937,98 @@ api.get("/admin/pending", adminMiddleware, async (c) => {
 api.get("/admin/users", adminMiddleware, async (c) => {
   const users = await getAllUsers(c.env);
   return c.json({ users });
+});
+
+// 管理员修改用户邮箱（需验证后生效）
+api.put("/admin/users/:id/email", adminMiddleware, async (c) => {
+  const admin = c.get("user");
+  const userId = parseInt(c.req.param("id") || "0", 10);
+  const body = await c.req.json().catch(() => ({}));
+  const email = ((body as any)?.email || "").trim().toLowerCase();
+
+  if (!userId || !email) {
+    return c.json({ error: "缺少用户ID或邮箱" }, 400);
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
+    return c.json({ error: "邮箱格式不正确" }, 400);
+  }
+  if (!isEmailDomainAllowed(c.env, email)) {
+    return c.json({ error: "该邮箱域名不在允许列表中" }, 400);
+  }
+
+  const targetUser = await findUserById(c.env, userId);
+  if (!targetUser) {
+    return c.json({ error: "用户不存在" }, 404);
+  }
+
+  // 生成验证令牌（24h 有效）并创建验证记录
+  const token = crypto.randomUUID().replace(/-/g, "") + crypto.randomUUID().replace(/-/g, "");
+  await createEmailVerificationRecord(c.env, userId, email, token);
+
+  // 发送验证邮件（管理员操作跳过每日邮件限额）
+  const siteName = c.env.SITE_NAME || "SubDomain Hub";
+  const url = new URL(c.req.url);
+  const siteUrl = url.origin;
+
+  const sent = await sendVerificationEmail(c.env, email, token, siteName, siteUrl);
+  if (!sent) {
+    return c.json({ error: "发送验证邮件失败" }, 500);
+  }
+
+  // a) 通知旧邮箱
+  if (targetUser.email && targetUser.email !== email) {
+    const oldEmailHtml = `
+<!DOCTYPE html>
+<html><body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f8f9fa;padding:40px 0;">
+<div style="max-width:520px;margin:0 auto;background:white;border-radius:12px;padding:40px;box-shadow:0 2px 12px rgba(0,0,0,0.08);">
+  <h2 style="color:#3b82f6;margin:0 0 16px;">📧 邮箱变更通知</h2>
+  <p style="color:#333;font-size:15px;line-height:1.6;">管理员已为你发起邮箱变更请求，新的邮箱为 <strong>${email}</strong>。</p>
+  <p style="color:#333;font-size:15px;line-height:1.6;">验证链接已发送至新邮箱，请在 24 小时内完成确认，否则变更将自动失效。</p>
+  <p style="color:#999;font-size:12px;margin-top:28px;border-top:1px solid #eee;padding-top:16px;">${siteName}</p>
+</div></body></html>`;
+    await sendEmail(c.env, {
+      to: targetUser.email,
+      subject: `邮箱变更通知 - ${siteName}`,
+      html: oldEmailHtml,
+      text: `管理员已为你发起邮箱变更请求，新的邮箱为 ${email}，验证链接已发送至新邮箱，24小时内确认，否则变更失效。`,
+    }).catch(() => {});
+  }
+
+  // b) 通知管理员邮箱
+  if (c.env.DB_ADMIN_ALERT_EMAIL) {
+    const adminEmailHtml = `
+<!DOCTYPE html>
+<html><body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f8f9fa;padding:40px 0;">
+<div style="max-width:520px;margin:0 auto;background:white;border-radius:12px;padding:40px;box-shadow:0 2px 12px rgba(0,0,0,0.08);">
+  <h2 style="color:#f59e0b;margin:0 0 16px;">⚙️ 管理员操作通知</h2>
+  <p style="color:#333;font-size:15px;line-height:1.6;">管理员 <strong>${admin.github_username}</strong> 已为用户 <strong>${targetUser.github_username}</strong>（旧邮箱 ${targetUser.email || '无'}）发起邮箱变更至新邮箱 <strong>${email}</strong>，验证邮件已发送。</p>
+  <p style="color:#999;font-size:12px;margin-top:28px;border-top:1px solid #eee;padding-top:16px;">${siteName}</p>
+</div></body></html>`;
+    await sendEmail(c.env, {
+      to: c.env.DB_ADMIN_ALERT_EMAIL,
+      subject: `管理员邮箱变更操作通知 - ${siteName}`,
+      html: adminEmailHtml,
+      text: `管理员 ${admin.github_username} 已为用户 ${targetUser.github_username}（旧邮箱 ${targetUser.email || '无'}）发起邮箱变更至新邮箱 ${email}，验证邮件已发送。`,
+    }).catch(() => {});
+  }
+
+  return c.json({ success: true, message: "验证邮件已发送给新邮箱，请用户点击链接确认后生效" });
+});
+
+// 管理员查看超限用户列表
+api.get("/admin/limit-users", adminMiddleware, async (c) => {
+  const users = await getOverLimitUsers(c.env);
+  return c.json({ users });
+});
+
+// 管理员重置用户当日限制
+api.post("/admin/limit-users/:userId/reset", adminMiddleware, async (c) => {
+  const userId = parseInt(c.req.param("userId") || "0", 10);
+  if (!userId) {
+    return c.json({ error: "缺少用户ID" }, 400);
+  }
+  await resetUserDailyLimits(c.env, userId);
+  return c.json({ success: true, message: "已解除当日限制" });
 });
 
 // 管理员审核通过

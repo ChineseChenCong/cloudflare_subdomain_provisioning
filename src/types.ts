@@ -59,6 +59,8 @@ export interface Env {
   S3_USE_PATH_STYLE?: string; // 'true' 时用 path-style（兼容 MinIO/R2 自定义端点）
   // 后端异常时管理告警收件邮箱（复用邮件通道）
   DB_ADMIN_ALERT_EMAIL?: string;
+  // 每日申请/删除子域频控阈值，写入 wrangler.toml [vars]，普通非机密变量
+  SUBDOMAIN_DAILY_LIMIT?: string;
 }
 
 export interface Announcement {

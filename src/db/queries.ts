@@ -1165,3 +1165,50 @@ export function enumerateAncestorFqdns(fqdn: string, domain: string): string[] {
   }
   return out;
 }
+
+
+// ==================== User Daily Limits (子域名申请/删除频控) ====================
+
+function getShanghaiDateString(): string {
+  return new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
+export async function getUserDailyLimits(env: Env, userId: number): Promise<{ apply_count: number; delete_count: number; limit_override: number }> {
+  const date = getShanghaiDateString();
+  const row = await env.DB.prepare(
+    "SELECT apply_count, delete_count, limit_override FROM user_daily_limits WHERE user_id = ? AND date = ?"
+  ).bind(userId, date).first<{ apply_count: number; delete_count: number; limit_override: number }>();
+  if (!row) {
+    return { apply_count: 0, delete_count: 0, limit_override: 0 };
+  }
+  return row;
+}
+
+export async function incrementUserDailyLimit(env: Env, userId: number, type: 'apply' | 'delete'): Promise<void> {
+  const date = getShanghaiDateString();
+  const field = type === 'apply' ? 'apply_count' : 'delete_count';
+  await env.DB.prepare(
+    `INSERT INTO user_daily_limits (user_id, date, ${field}) VALUES (?, ?, 1)
+     ON CONFLICT(user_id, date) DO UPDATE SET ${field} = ${field} + 1, updated_at = datetime('now')`
+  ).bind(userId, date).run();
+}
+
+export async function resetUserDailyLimits(env: Env, userId: number): Promise<void> {
+  const date = getShanghaiDateString();
+  await env.DB.prepare(
+    "UPDATE user_daily_limits SET apply_count = 0, delete_count = 0, limit_override = 1, updated_at = datetime('now') WHERE user_id = ? AND date = ?"
+  ).bind(userId, date).run();
+}
+
+export async function getOverLimitUsers(env: Env): Promise<Array<{ user_id: number; apply_count: number; delete_count: number; github_username: string | null }>> {
+  const date = getShanghaiDateString();
+  const rawLimit = Number(env.SUBDOMAIN_DAILY_LIMIT);
+  const limit = Number.isInteger(rawLimit) && rawLimit > 0 ? rawLimit : 5;
+  const rows = await env.DB.prepare(
+    `SELECT ul.user_id, ul.apply_count, ul.delete_count, u.github_username
+     FROM user_daily_limits ul
+     LEFT JOIN users u ON u.id = ul.user_id
+     WHERE ul.date = ? AND (ul.apply_count >= ? OR ul.delete_count >= ?)`
+  ).bind(date, limit, limit).all<{ user_id: number; apply_count: number; delete_count: number; github_username: string | null }>();
+  return rows.results;
+}

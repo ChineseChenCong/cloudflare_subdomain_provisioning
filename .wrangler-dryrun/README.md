@@ -1,1 +1,0 @@
-This folder contains the built output assets for the worker "cloudflare-subdomain-provisioning" generated at 2026-09-14T16:17:47.746Z.
