@@ -64,17 +64,6 @@ function rateLimit(c: Context, windowMs: number, max: number, keyBase: string): 
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
-// 防止内联脚本被 </script> 提前截断
-app.use('*', async (c, next) => {
-  const res = await next();
-  if (res.headers.get('content-type')?.includes('text/html')) {
-    const text = await res.text();
-    const safe = text.replace(/<\/script>/gi, '<\\/script>');
-    return c.html(safe);
-  }
-  return res;
-});
-
 // ==================== 安全响应头 ====================
 // 非破坏性安全头。注意：CSP 刻意不加——本项目前端（pages.ts）有大量内联
 // script/style/onclick，若加严格 CSP 会直接破坏页面显示与功能，违背
