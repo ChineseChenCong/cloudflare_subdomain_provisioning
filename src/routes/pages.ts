@@ -419,6 +419,7 @@ function renderPage({
       }
     }
 
+    }
 
     // 每页条数选择 + 翻页控件（‹/›/«/»）
     function pagerControl(pager, total, setPageName, setPerName) {
