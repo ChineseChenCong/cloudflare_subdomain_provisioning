@@ -380,6 +380,7 @@ function renderPage({
     // 模糊匹配辅助
     function matchesQuery(text, q) { return q && text ? text.toLowerCase().includes(q.toLowerCase()) : false; }
     // 前端搜索防抖处理
+    // FIXED: manual search trigger
     function setSearch(key, val) {
       clearTimeout(state._searchTimer);
       state._searchTimer = setTimeout(() => {
