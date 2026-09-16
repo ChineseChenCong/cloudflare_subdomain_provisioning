@@ -1213,4 +1213,16 @@ api.delete("/admin/subdomains/:id", adminMiddleware, async (c) => {
   return c.json({ success: true, reason: reason || null });
 });
 
+api.post("/admin/sync-db", adminMiddleware, async (c) => {
+  try {
+    const { syncD1ToMirrors } = await import("../services/sync");
+    await syncD1ToMirrors(c.env);
+    return c.json({ success: true, message: "全量对齐完成，以 D1 为准覆盖镜像" });
+  } catch (e) {
+    console.error(`[audit] admin sync-db failed: ${(e as Error).message}`);
+    return c.json({ success: false, error: (e as Error).message }, 500);
+  }
+});
+
+
 export default api;

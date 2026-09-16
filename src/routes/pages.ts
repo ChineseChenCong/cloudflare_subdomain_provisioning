@@ -393,6 +393,32 @@ function renderPage({
         });
       }, 200);
     }
+    // 手动触发 DNS 搜索，避免输入时频繁刷新
+    function setDnsSearchManual() {
+      const el = document.getElementById('dns-search-input');
+      if (!el) return;
+      state.dnsSearch = (el.value || '').trim();
+      state.dnsPager.page = 1;
+      render();
+    // 管理员手动同步数据库到镜像
+    async function syncDatabaseNow() {
+      if (!confirm('确定立即执行全量同步？以 D1 为准覆盖镜像，可能耗时数秒')) return;
+      try {
+        showToast('同步中...', 'info');
+        const res = await fetch('/api/admin/sync-db', { method: 'POST', credentials: 'include' });
+        const data = await res.json();
+        if (data.success) {
+          showToast('同步完成：' + (data.message || ''), 'success');
+        } else {
+          showToast(data.error || '同步失败', 'error');
+        }
+      } catch (e) {
+        showToast('同步请求失败', 'error');
+      }
+    }
+
+    }
+
     // 每页条数选择 + 翻页控件（‹/›/«/»）
     function pagerControl(pager, total, setPageName, setPerName) {
       const per = pager.perPage || 5;
@@ -483,7 +509,7 @@ function renderPage({
         '<span style="font-size:13px;color:var(--text-muted)">' + apPending.length + ' 待我处理 · ' + rqPending.length + ' 我发起的' +
         (doneCount > 0 ? ' · ' + doneCount + ' 已处理' : '') + '</span></div>' +
         '<details style="margin:8px 0"><summary style="cursor:pointer;font-size:13px;color:var(--text-muted)">搜索审批</summary>' +
-        '<div style="margin-top:6px"><input class="form-input" placeholder="搜索 target_fqdn / base_fqdn / 申请人" value="' + escapeHtml(state.apprSearch || '') + '" oninput="setSearch(\\'apprSearch\\', this.value)" style="max-width:360px" /></div></details>';
+        '<div style="margin-top:6px"><input class="form-input" placeholder="搜索 target_fqdn / base_fqdn / 申请人" value="' + escapeHtml(state.apprSearch || '') + '" onkeydown="if(event.key===\'Enter\'){setSearch(\\'apprSearch\\', this.value)}" style="max-width:360px" /></div></details>';
 
       if (apPending.length === 0 && rqPending.length === 0 && doneCount === 0) {
         h += '<div class="card"><p style="color:var(--text-muted);margin:0">暂无审批请求。申请更深一层的子域名时，若其上级已被他人拥有，该申请会出现在这里等待其所有者同意；若您是所有者，他人申请您名下子域的请求也会在此处理。</p></div>';
@@ -615,7 +641,7 @@ function renderPage({
         '<h2 class="section-title">我的子域名</h2>' +
         '<span style="font-size:13px;color:var(--text-muted)">' + activeSubs.length + ' / ' + state.config.max_subdomains + '</span></div>' +
         '<details style="margin:8px 0 12px 0"><summary style="cursor:pointer;font-size:13px;color:var(--text-muted)">搜索</summary>' +
-        '<div style="margin-top:6px"><input class="form-input" placeholder="搜索 FQDN / 用户昵称 / 邮箱" value="' + escapeHtml(state.subSearch || '') + '" oninput="setSearch(\\'subSearch\\', this.value)" style="max-width:360px" /></div></details>';
+        '<div style="margin-top:6px"><input class="form-input" placeholder="搜索 FQDN / 用户昵称 / 邮箱" value="' + escapeHtml(state.subSearch || '') + '" onkeydown="if(event.key===\'Enter\'){setSearch(\\'subSearch\\', this.value)}" style="max-width:360px" /></div></details>';
 
       if (subs.length === 0) {
         h += '<div class="card empty"><div class="empty-icon">' + icons.mailbox + '</div><p>还没有子域名，快去申请一个吧</p></div>';
@@ -791,7 +817,8 @@ function renderPage({
           '<option value=""'+(!state.dnsTypeFilter?' selected':'')+'>全部</option>' +
           types.map(function (t2) { return '<option value="'+t2+'"'+(state.dnsTypeFilter===t2?' selected':'')+'>'+t2+'</option>'; }).join('') +
           '</select></label>' +
-          '<input class="form-input" style="width:auto;max-width:240px;padding:4px 10px;font-size:12px" placeholder="搜索 名称/内容" value="' + escapeHtml(state.dnsSearch || '') + '" oninput="setSearch(\\'dnsSearch\\', this.value)" />' +
+          '<input id="dns-search-input" class="form-input" style="width:auto;max-width:240px;padding:4px 10px;font-size:12px" placeholder="搜索 名称/内容" value="' + escapeHtml(state.dnsSearch || '') + '" onkeydown="if(event.key===\'Enter\'){setDnsSearchManual()}" />' +
+          '<button class="btn btn-sm btn-secondary" onclick="setDnsSearchManual()" style="padding:4px 10px;font-size:12px">搜索</button>' +
           '</div>' +
           '<span style="font-size:13px;color:var(--text-muted)">当前 ' + list.length + ' / ' + records.length + ' 条</span></div>';
         h += '<div class="card"><div class="table-wrap"><table>' +
@@ -928,7 +955,10 @@ function renderPage({
 
       let h = '<div class="dashboard fade-in">' +
         '<a href="#" class="back-link" onclick="navigate(\\'dashboard\\'); return false;">← 返回面板</a>' +
-        '<div class="section-header" style="margin-top:16px"><h2 class="section-title" style="display:flex;align-items:center;gap:8px">' + icons.admin + ' 管理员面板</h2></div>';
+        '<div class="section-header" style="margin-top:16px;display:flex;align-items:center;justify-content:space-between;gap:12px">' +
+        '<h2 class="section-title" style="display:flex;align-items:center;gap:8px;margin:0">' + icons.admin + ' 管理员面板</h2>' +
+        '<button class="btn btn-primary btn-sm btn-jelly" onclick="syncDatabaseNow()">🔄 同步数据库</button>' +
+        '</div>';
 
       // Tabs
       h += '<div class="tabs">' +
@@ -972,7 +1002,7 @@ function renderPage({
       }
 
       let h = '<details style="margin-bottom:10px"><summary style="cursor:pointer;font-size:13px;color:var(--text-muted)">搜索待审核</summary>' +
-        '<div style="margin-top:6px"><input class="form-input" placeholder="搜索 FQDN / 用户 / 邮箱" value="' + escapeHtml(state.adminPendingSearch || '') + '" oninput="setSearch(\\'adminPendingSearch\\', this.value)" style="max-width:360px" /></div></details>';
+        '<div style="margin-top:6px"><input class="form-input" placeholder="搜索 FQDN / 用户 / 邮箱" value="' + escapeHtml(state.adminPendingSearch || '') + '" onkeydown="if(event.key===\'Enter\'){setSearch(\\'adminPendingSearch\\', this.value)}" style="max-width:360px" /></div></details>';
       items.forEach(sub => {
         const fqdn = sub.subdomain + '.' + sub.domain;
         h += '<div class="card card-hover review-card" style="margin-bottom:10px;padding:20px;">' +
@@ -1007,7 +1037,7 @@ function renderPage({
       }
 
       let h = '<details style="margin-bottom:10px"><summary style="cursor:pointer;font-size:13px;color:var(--text-muted)">搜索所有子域名</summary>' +
-        '<div style="margin-top:6px"><input class="form-input" placeholder="搜索 FQDN / 用户昵称" value="' + escapeHtml(state.adminAllSearch || '') + '" oninput="setSearch(\\'adminAllSearch\\', this.value)" style="max-width:360px" /></div></details>' +
+        '<div style="margin-top:6px"><input class="form-input" placeholder="搜索 FQDN / 用户昵称" value="' + escapeHtml(state.adminAllSearch || '') + '" onkeydown="if(event.key===\'Enter\'){setSearch(\\'adminAllSearch\\', this.value)}" style="max-width:360px" /></div></details>' +
         '<div class="card"><div class="table-wrap"><table>' +
         '<thead><tr><th>子域名</th><th>用户</th><th>状态</th><th>创建时间</th><th>操作</th></tr></thead><tbody>';
       items.forEach(sub => {
@@ -1037,7 +1067,7 @@ function renderPage({
       }
 
       let h = '<details style="margin-bottom:10px"><summary style="cursor:pointer;font-size:13px;color:var(--text-muted)">搜索用户</summary>' +
-        '<div style="margin-top:6px"><input class="form-input" placeholder="搜索 用户名 / 邮箱" value="' + escapeHtml(state.adminUsersSearch || '') + '" oninput="setSearch(\\'adminUsersSearch\\', this.value)" style="max-width:360px" /></div></details>' +
+        '<div style="margin-top:6px"><input class="form-input" placeholder="搜索 用户名 / 邮箱" value="' + escapeHtml(state.adminUsersSearch || '') + '" onkeydown="if(event.key===\'Enter\'){setSearch(\\'adminUsersSearch\\', this.value)}" style="max-width:360px" /></div></details>' +
         '<div class="card"><div class="table-wrap"><table>' +
         '<thead><tr><th>头像</th><th>用户名</th><th>邮箱</th><th>身份</th><th>注册时间</th><th>操作</th></tr></thead><tbody>';
       users.forEach(u => {
