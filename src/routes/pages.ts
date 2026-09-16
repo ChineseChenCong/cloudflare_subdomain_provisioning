@@ -404,16 +404,16 @@ function renderPage({
     async function syncDatabaseNow() {
       if (!confirm('确定立即执行全量同步？以 D1 为准覆盖镜像，可能耗时数秒')) return;
       try {
-        showToast('同步中...', 'info');
+        toast('同步中...', 'info');
         const res = await fetch('/api/admin/sync-db', { method: 'POST', credentials: 'include' });
         const data = await res.json();
         if (data.success) {
-          showToast('同步完成：' + (data.message || ''), 'success');
+          toast('同步完成：' + (data.message || ''), 'success');
         } else {
-          showToast(data.error || '同步失败', 'error');
+          toast(data.error || '同步失败', 'error');
         }
       } catch (e) {
-        showToast('同步请求失败', 'error');
+        toast('同步请求失败', 'error');
       }
     }
 
