@@ -287,7 +287,7 @@ function renderPage({
       if (state.user) {
         let adminLink = '';
         if (state.user.is_admin) {
-          adminLink = '<a href="#" class="btn btn-ghost btn-sm" onclick="navigate(\\'admin\\'); return false;" style="font-size:13px">' + icons.admin + ' 管理</a>';
+          adminLink = '<a href="#" class="btn btn-ghost btn-sm" onclick="navigate(\'admin\\'); return false;" style="font-size:13px">' + icons.admin + ' 管理</a>';
         }
         el.innerHTML = '<div class="user-info">' +
           '<img class="user-avatar" src="' + (state.user.avatar_url || '') + '" alt="">' +
@@ -509,7 +509,7 @@ function renderPage({
         '<span style="font-size:13px;color:var(--text-muted)">' + apPending.length + ' 待我处理 · ' + rqPending.length + ' 我发起的' +
         (doneCount > 0 ? ' · ' + doneCount + ' 已处理' : '') + '</span></div>' +
         '<details style="margin:8px 0"><summary style="cursor:pointer;font-size:13px;color:var(--text-muted)">搜索审批</summary>' +
-        '<div style="margin-top:6px"><input class="form-input" placeholder="搜索 target_fqdn / base_fqdn / 申请人" value="' + escapeHtml(state.apprSearch || '') + '" onkeydown="if(event.key===\'Enter\'){setSearch(\\'apprSearch\\', this.value)}" style="max-width:360px" /></div></details>';
+        '<div style="margin-top:6px"><input class="form-input" placeholder="搜索 target_fqdn / base_fqdn / 申请人" value="' + escapeHtml(state.apprSearch || '') + '" onkeydown="if(event.key===\'Enter\'){setSearch(\'apprSearch\', this.value)}" style="max-width:360px" /></div></details>';
 
       if (apPending.length === 0 && rqPending.length === 0 && doneCount === 0) {
         h += '<div class="card"><p style="color:var(--text-muted);margin:0">暂无审批请求。申请更深一层的子域名时，若其上级已被他人拥有，该申请会出现在这里等待其所有者同意；若您是所有者，他人申请您名下子域的请求也会在此处理。</p></div>';
@@ -612,7 +612,7 @@ function renderPage({
               '<button class="btn btn-sm" onclick="sendVerificationEmail()">发送验证邮件</button>'
             : '<p>📧 您还没有绑定邮箱，请先绑定邮箱后即可申请子域名</p>' +
               '<div class="verify-binder">' +
-              '<input type="email" class="form-input" id="bind-email" placeholder="name@' + ((state.allowedEmailDomains && state.allowedEmailDomains[0]) || 'example.com').replace(/\\*/g, '') + '" onkeydown="if(event.key===\\Enter\\'){bindEmail();}" />' +
+              '<input type="email" class="form-input" id="bind-email" placeholder="name@' + ((state.allowedEmailDomains && state.allowedEmailDomains[0]) || 'example.com').replace(/\\*/g, '') + '" onkeydown="if(event.key===\'Enter\'){bindEmail();}" />' +
               '<button class="btn btn-primary btn-sm btn-jelly" onclick="bindEmail()">绑定并发送验证邮件</button>' +
               '</div>') +
           '</div>' +
@@ -641,7 +641,7 @@ function renderPage({
         '<h2 class="section-title">我的子域名</h2>' +
         '<span style="font-size:13px;color:var(--text-muted)">' + activeSubs.length + ' / ' + state.config.max_subdomains + '</span></div>' +
         '<details style="margin:8px 0 12px 0"><summary style="cursor:pointer;font-size:13px;color:var(--text-muted)">搜索</summary>' +
-        '<div style="margin-top:6px"><input class="form-input" placeholder="搜索 FQDN / 用户昵称 / 邮箱" value="' + escapeHtml(state.subSearch || '') + '" onkeydown="if(event.key===\'Enter\'){setSearch(\\'subSearch\\', this.value)}" style="max-width:360px" /></div></details>';
+        '<div style="margin-top:6px"><input class="form-input" placeholder="搜索 FQDN / 用户昵称 / 邮箱" value="' + escapeHtml(state.subSearch || '') + '" onkeydown="if(event.key===\'Enter\'){setSearch(\'subSearch\', this.value)}" style="max-width:360px" /></div></details>';
 
       if (subs.length === 0) {
         h += '<div class="card empty"><div class="empty-icon">' + icons.mailbox + '</div><p>还没有子域名，快去申请一个吧</p></div>';
@@ -1002,7 +1002,7 @@ function renderPage({
       }
 
       let h = '<details style="margin-bottom:10px"><summary style="cursor:pointer;font-size:13px;color:var(--text-muted)">搜索待审核</summary>' +
-        '<div style="margin-top:6px"><input class="form-input" placeholder="搜索 FQDN / 用户 / 邮箱" value="' + escapeHtml(state.adminPendingSearch || '') + '" onkeydown="if(event.key===\'Enter\'){setSearch(\\'adminPendingSearch\\', this.value)}" style="max-width:360px" /></div></details>';
+        '<div style="margin-top:6px"><input class="form-input" placeholder="搜索 FQDN / 用户 / 邮箱" value="' + escapeHtml(state.adminPendingSearch || '') + '" onkeydown="if(event.key===\'Enter\'){setSearch(\'adminPendingSearch\', this.value)}" style="max-width:360px" /></div></details>';
       items.forEach(sub => {
         const fqdn = sub.subdomain + '.' + sub.domain;
         h += '<div class="card card-hover review-card" style="margin-bottom:10px;padding:20px;">' +
@@ -1037,7 +1037,7 @@ function renderPage({
       }
 
       let h = '<details style="margin-bottom:10px"><summary style="cursor:pointer;font-size:13px;color:var(--text-muted)">搜索所有子域名</summary>' +
-        '<div style="margin-top:6px"><input class="form-input" placeholder="搜索 FQDN / 用户昵称" value="' + escapeHtml(state.adminAllSearch || '') + '" onkeydown="if(event.key===\'Enter\'){setSearch(\\'adminAllSearch\\', this.value)}" style="max-width:360px" /></div></details>' +
+        '<div style="margin-top:6px"><input class="form-input" placeholder="搜索 FQDN / 用户昵称" value="' + escapeHtml(state.adminAllSearch || '') + '" onkeydown="if(event.key===\'Enter\'){setSearch(\'adminAllSearch\', this.value)}" style="max-width:360px" /></div></details>' +
         '<div class="card"><div class="table-wrap"><table>' +
         '<thead><tr><th>子域名</th><th>用户</th><th>状态</th><th>创建时间</th><th>操作</th></tr></thead><tbody>';
       items.forEach(sub => {
@@ -1067,7 +1067,7 @@ function renderPage({
       }
 
       let h = '<details style="margin-bottom:10px"><summary style="cursor:pointer;font-size:13px;color:var(--text-muted)">搜索用户</summary>' +
-        '<div style="margin-top:6px"><input class="form-input" placeholder="搜索 用户名 / 邮箱" value="' + escapeHtml(state.adminUsersSearch || '') + '" onkeydown="if(event.key===\'Enter\'){setSearch(\\'adminUsersSearch\\', this.value)}" style="max-width:360px" /></div></details>' +
+        '<div style="margin-top:6px"><input class="form-input" placeholder="搜索 用户名 / 邮箱" value="' + escapeHtml(state.adminUsersSearch || '') + '" onkeydown="if(event.key===\'Enter\'){setSearch(\'adminUsersSearch\', this.value)}" style="max-width:360px" /></div></details>' +
         '<div class="card"><div class="table-wrap"><table>' +
         '<thead><tr><th>头像</th><th>用户名</th><th>邮箱</th><th>身份</th><th>注册时间</th><th>操作</th></tr></thead><tbody>';
       users.forEach(u => {
