@@ -400,6 +400,8 @@ function renderPage({
       state.dnsSearch = (el.value || '').trim();
       state.dnsPager.page = 1;
       render();
+    }
+
     // 管理员手动同步数据库到镜像
     async function syncDatabaseNow() {
       if (!confirm('确定立即执行全量同步？以 D1 为准覆盖镜像，可能耗时数秒')) return;
