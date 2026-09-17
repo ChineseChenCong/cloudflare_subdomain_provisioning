@@ -16,10 +16,10 @@ database_id = "c888cdd9-b2f8-4501-92ab-5d3872406f1e"
 # 只配置在 Cloudflare Dashboard → Worker → 设置 → 变量（加密），且只存加密。
 # 本地调试请用 .dev.vars（已被 .gitignore 忽略，不会进 GitHub）。
 
-ADMIN_CONTACT_EMAIL = "admin@example.com"
-ALLOWED_EMAIL_DOMAINS = "example.com,gmail.com,outlook.com"
+ADMIN_CONTACT_EMAIL = "admin@mail.rol.moe"
+ALLOWED_EMAIL_DOMAINS = "mail.rol.moe,rol.moe,mail.kivotos.edu.kg,kivotos.edu.kg,gmail.com,qq.com"
 BANNED_PREFIXES = "www,ns1,ns2,ns,mc,mail,video,tcp,udp,tls,smtp,pop,pop3,imap,ftp,enterpriseenrollment,admin,api,cdn,dev,staging,test,beta,alpha,demo,status,blog,shop,store,app,dashboard,panel,portal,secure,vpn,proxy,relay,mx,mx1,mx2,autoconfig,autodiscover,_dmarc,_domainkey,cpanel,webmail,webdisk,cpcalendars,cpcontacts,ww,ww1,ww2,ww3,dns,dash,gov,edu,ac,pb,voip,abydoss,drs,bg5drs,cc,ddns,icp,365,ts,teamspeak,url,dwz,web,webs,ddos,dos,user,localhost,docs,support,help,about,faq,m,mobile,root,server,host,default,postmaster,hostmaster,webmaster,abuse,info,noreply,download,static,img,assets,media,service,services,gateway,primary,secondary,dns1,dns2,external,webhook"
-DOMAINS = "example.com,example.org"
+DOMAINS = "rol.moe,kivotos.edu.kg"
 EMAIL_VERIFICATION_REQUIRED = "true"
 EMAIL_DAILY_EMAIL_LIMIT = "5"
 MAX_RECORDS_PER_SUBDOMAIN = "1000"
@@ -28,16 +28,16 @@ MAX_SUBDOMAINS_PER_USER = "5"
 DNS_LIVE_READ = "true"
 # 上级所有权审批超时（小时）；超时未处理自动驳回。默认 72
 OWNER_APPROVAL_DEADLINE_HOURS = "72"
-SITE_LOGO = ""
-SITE_NAME = "SubDomain Hub"
-SMTP_FROM = "noreply@example.com"
-SMTP_FROM_NAME = "SubDomain Hub"
+SITE_LOGO = "https://sukicdn.com/bg5drs/i/2026/07/04/10ckw.png"
+SITE_NAME = "R.O.L. Domain System"
+SMTP_FROM = "noreply@rol.moe"
+SMTP_FROM_NAME = "R.O.L. Domain System-noreply"
 
 # ========== 未提供 / 可选（保持注释；如需可移除 # 启用，仅限非机密） ==========
 # SITE_BACKGROUND_IMAGE = "https://..."
 # SITE_BACKGROUND_OVERLAY = "rgba(15, 23, 42, 0.7)"
 # SITE_BEIAN = "浙ICP备12345678号-1"
-FRIEND_LINKS = '[]'
+FRIEND_LINKS = '[{"name":"莉莉安尼亚邮箱系统","url":"https://mail.rol.moe","description":"莉莉安尼亚官方电子邮箱"}]'
 # 存储后端读回退链顺序：custom-sqlite(Turso) 优先、d1 兜底；缺省 d1 = 纯 D1 现状等价。
 # 非机密普通变量（幂等写入本文件，保证跨机/重部署不丢）；配合 CUSTOM_SQLITE_URL/TOKEN 生效。
 DB_QUERY_ORDER = "custom-sqlite,d1"
