@@ -404,22 +404,6 @@ function renderPage({
       render();
     }
 
-    // 管理员手动同步数据库到镜像
-    async function syncDatabaseNow() {
-      if (!confirm('确定立即执行全量同步？以 D1 为准覆盖镜像，可能耗时数秒')) return;
-      try {
-        toast('同步中...', 'info');
-        const res = await fetch('/api/admin/sync-db', { method: 'POST', credentials: 'include' });
-        const data = await res.json();
-        if (data.success) {
-          toast('同步完成：' + (data.message || ''), 'success');
-        } else {
-          toast(data.error || '同步失败', 'error');
-        }
-      } catch (e) {
-        toast('同步请求失败', 'error');
-      }
-    }
 
     }
 
@@ -959,9 +943,8 @@ function renderPage({
 
       let h = '<div class="dashboard fade-in">' +
         '<a href="#" class="back-link" onclick="navigate(\'dashboard\'); return false;">← 返回面板</a>' +
-        '<div class="section-header" style="margin-top:16px;display:flex;align-items:center;justify-content:space-between;gap:12px">' +
-        '<h2 class="section-title" style="display:flex;align-items:center;gap:8px;margin:0">' + icons.admin + ' 管理员面板</h2>' +
-        '<button class="btn btn-primary btn-sm btn-jelly" onclick="syncDatabaseNow()">🔄 同步数据库</button>' +
+        '<div class="section-header" style="margin-top:16px">' +
+        '<h2 class="section-title" style="display:flex;align-items:center;gap:8px">' + icons.admin + ' 管理员面板</h2>' +
         '</div>';
 
       // Tabs

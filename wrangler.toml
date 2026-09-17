@@ -41,6 +41,7 @@ FRIEND_LINKS = '[]'
 # 存储后端读回退链顺序：custom-sqlite(Turso) 优先、d1 兜底；缺省 d1 = 纯 D1 现状等价。
 # 非机密普通变量（幂等写入本文件，保证跨机/重部署不丢）；配合 CUSTOM_SQLITE_URL/TOKEN 生效。
 DB_QUERY_ORDER = "custom-sqlite,d1"
+CUSTOM_SQLITE_URL = "libsql://cf-domain-system-chinesechencong.aws-ap-northeast-1.turso.io"
 # 走 Resend 时 SMTP_HOST / SMTP_PORT / SMTP_USER / SMTP_PASS 无需配置（仅 SMTP_FROM / SMTP_FROM_NAME 已启用）
 
 # ===================== 可观测性（wrangler@4 官方推荐 logs/traces 子块） =====================
